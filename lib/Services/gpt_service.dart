@@ -1,50 +1,86 @@
-// Plik: lib/Services/gpt_service.dart
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 class GptService {
-  static Future<String> analyzeMood(String userInput) async {
-    final apiKey = dotenv.env['OPENROUTER_API_KEY'];
+  static Future<String> chatWithAI(
+    String userInput,
+    String history,
+    bool isFemale,
+  ) async {
+    // 1. ZABEZPIECZENIE: Ładowanie .env jeśli brakuje
+    if (!dotenv.isInitialized) {
+      try {
+        await dotenv.load(fileName: ".env");
+      } catch (e) {
+        return "BŁĄD: Nie znaleziono pliku .env. Upewnij się, że plik istnieje w głównym folderze.";
+      }
+    }
 
+    final apiKey = dotenv.env['OPENROUTER_API_KEY'];
     if (apiKey == null || apiKey.isEmpty) {
-      throw Exception("Brak klucza API w pliku .env");
+      return "BŁĄD: Klucz API jest pusty. Sprawdź plik .env.";
     }
 
     final url = Uri.parse("https://openrouter.ai/api/v1/chat/completions");
 
     final headers = {
       'Authorization': 'Bearer $apiKey',
-      'HTTP-Referer': 'http://localhost',
-      'X-Title': 'Mood Journal GPT',
       'Content-Type': 'application/json',
+      'HTTP-Referer': 'http://localhost',
+      'X-Title': 'Mood Journal',
     };
 
+    // 2. PROMPT I PERSONA
+    String systemPrompt = isFemale
+        ? "Jesteś empatyczną asystentką psychologiczną. Twoje odpowiedzi są ciepłe, zrozumiałe i wspierające."
+        : "Jesteś konkretnym, ale empatycznym asystentem psychologicznym. Twoje odpowiedzi są rzeczowe i wspierające.";
+
+    String fullPrompt =
+        """
+    $systemPrompt
+    
+    Historia dotychczasowej rozmowy:
+    $history
+    
+    Użytkownik właśnie napisał:
+    $userInput
+    
+    Odpowiedz użytkownikowi.
+    """;
+
     final body = jsonEncode({
-      "model": "meta-llama/llama-3.1-8b-instruct:free",
+      "model": "x-ai/grok-4.1-fast", // Wybrany model
       "messages": [
-        {
-          "role": "system",
-          "content":
-          "Jesteś empatycznym doradcą nastroju. Na podstawie wpisu użytkownika analizujesz jego nastrój i dajesz krótką, wspierającą sugestię."
-        },
-        {
-          "role": "user",
-          "content": userInput
-        }
-      ]
+        {"role": "user", "content": fullPrompt},
+      ],
+      // Dodajemy parametr reasoning, którego wymaga ten model (zgodnie z Twoim przykładem)
+      "reasoning": {"enabled": true},
     });
 
-    final response = await http.post(url, headers: headers, body: body);
+    // 4. WYSŁANIE
+    try {
+      final response = await http.post(url, headers: headers, body: body);
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final content = data['choices'][0]['message']['content'];
-      return content.trim();
-    } else {
-      final error = jsonDecode(response.body);
-      final message = error['error']?['message'] ?? 'Nieznany błąd';
-      throw Exception("GPT error: $message");
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        // Próbujemy wyciągnąć treść odpowiedzi
+        if (data['choices'] != null && data['choices'].isNotEmpty) {
+          // Opcjonalnie: Możesz tu też sprawdzić data['choices'][0]['message']['reasoning_details'] jeśli chcesz widzieć proces myślenia
+          return data['choices'][0]['message']['content'].trim();
+        } else {
+          return "AI nie zwróciło odpowiedzi (pusta treść).";
+        }
+      } else {
+        // Obsługa błędu 402 (Brak płatności) lub 404 (Model niedostępny)
+        if (response.statusCode == 402) {
+          return "BŁĄD 402: Wygląda na to, że ten model jednak wymaga płatnych kredytów na OpenRouter.";
+        }
+        return "Błąd serwera (Kod: ${response.statusCode}). Treść: ${response.body}";
+      }
+    } catch (e) {
+      return "Błąd połączenia z internetem: $e";
     }
   }
 }
