@@ -1,7 +1,6 @@
 # mood_journal
 
-A new Flutter project.
-
+Aplikacja na telefony umożliwiająca notowanie swojego nastroju w postaci dziennika. Po dodaniu emocji do dyspozycji jest konkretny asystent AI który moze pomóc w rozwiązaniu problemu i doradzić jak sobie poradzić z emocją która nam towarzyszy i dokucza. Emocje są zapisywane w bazie danych można do nich wracać kiedy chcemy. Na ten moment projekt jest w rozbudowie. 
 ## Getting Started
 
 This project is a starting point for a Flutter application.
