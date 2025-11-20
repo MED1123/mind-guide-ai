@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
-// Upewnij się, że ten plik istnieje w folderze lib/Services/
+// Importujemy nasz nowy serwis bazy danych
+import 'Services/database_service.dart';
 import 'Services/gpt_service.dart';
 
 // --- KONFIGURACJA KOLORÓW ---
@@ -15,8 +16,9 @@ class AppColors {
   static const Color cardRed = Color(0xFFEF5350);
 }
 
-// --- MODEL DANYCH ---
+// --- MODEL DANYCH (ZAKTUALIZOWANY O ID) ---
 class MoodEntry {
+  final int? id; // ID jest potrzebne do bazy danych
   final DateTime date;
   final String text;
   final double moodRating;
@@ -24,6 +26,7 @@ class MoodEntry {
   final String aiAnalysis;
 
   MoodEntry({
+    this.id,
     required this.date,
     required this.text,
     required this.moodRating,
@@ -32,15 +35,15 @@ class MoodEntry {
   });
 }
 
-// Globalna lista przechowująca wpisy w pamięci (zniknie po restarcie aplikacji)
-List<MoodEntry> globalMoodHistory = [];
-
 // --- START APLIKACJI ---
 Future<void> main() async {
+  // Wymagane dla inicjalizacji sqflite przed uruchomieniem UI
+  WidgetsFlutterBinding.ensureInitialized();
+  
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
-    print("INFO: Brak pliku .env, AI nie zadziała, ale UI się uruchomi.");
+    print("INFO: Brak pliku .env");
   }
   runApp(const MoodJournalApp());
 }
@@ -147,15 +150,16 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   int _currentIndex = 0;
 
   final List<Widget> _pages = [
-    const HomeScreenUI(),
+    const HomeScreenUI(),      // Ekran Główny
     const PlaceholderScreen(title: "Kalendarz"),
+    const PlaceholderScreen(title: "Czat AI (Wkrótce)"), // Nowy ekran
     const PlaceholderScreen(title: "Profil"),
   ];
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(), // Chowanie klawiatury
+      onTap: () => FocusScope.of(context).unfocus(),
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
         body: _pages[_currentIndex],
@@ -165,13 +169,14 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
             boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 20, offset: const Offset(0, -5))],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 10),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween, // Zmienione na spaceBetween dla 4 ikon
               children: [
-                _buildNavItem(Icons.home_filled, 0),
-                _buildNavItem(Icons.calendar_month, 1),
-                _buildNavItem(Icons.person, 2),
+                _buildNavItem(Icons.home_filled, 0, "Start"),
+                _buildNavItem(Icons.calendar_month, 1, "Kalendarz"),
+                _buildNavItem(Icons.chat_bubble_outline, 2, "Asystent"), // Nowa ikona!
+                _buildNavItem(Icons.person, 3, "Profil"),
               ],
             ),
           ),
@@ -180,17 +185,29 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
     );
   }
 
-  Widget _buildNavItem(IconData icon, int index) {
+  Widget _buildNavItem(IconData icon, int index, String label) {
     bool isSelected = _currentIndex == index;
-    return IconButton(
-      icon: Icon(icon, size: 28),
-      color: isSelected ? AppColors.primaryBlue : Colors.grey.shade400,
-      onPressed: () => setState(() => _currentIndex = index),
+    return Expanded( // Expanded żeby ikony ładnie się rozłożyły
+      child: InkWell(
+        onTap: () => setState(() => _currentIndex = index),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon, 
+              size: 26, 
+              color: isSelected ? AppColors.primaryBlue : Colors.grey.shade400
+            ),
+            if (isSelected) // Pokazuj tekst tylko dla aktywnego
+              Text(label, style: const TextStyle(fontSize: 10, color: AppColors.primaryBlue, fontWeight: FontWeight.bold))
+          ],
+        ),
+      ),
     );
   }
 }
 
-// --- EKRAN GŁÓWNY UI ---
+// --- EKRAN GŁÓWNY UI (Z BAZĄ DANYCH) ---
 class HomeScreenUI extends StatefulWidget {
   const HomeScreenUI({super.key});
 
@@ -202,13 +219,27 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
   final TextEditingController _textController = TextEditingController();
   String _selectedCategory = "Spokój";
   final List<String> _categories = ["Spokój", "Radość", "Stres", "Smutek", "Zmęczenie"];
+  
+  // Future, który posłuży do pobierania danych z bazy
+  late Future<List<MoodEntry>> _entriesFuture;
 
-  // --- LOGIKA IKON I KOLORÓW ---
+  @override
+  void initState() {
+    super.initState();
+    _refreshEntries();
+  }
+
+  void _refreshEntries() {
+    setState(() {
+      _entriesFuture = DatabaseService.instance.readAllEntries();
+    });
+  }
+
   IconData _getCategoryIcon(String category) {
     switch (category) {
       case "Radość": return Icons.sentiment_very_satisfied;
       case "Stres": return Icons.bolt;
-      case "Smutek": return Icons.cloud; // lub beach_access
+      case "Smutek": return Icons.cloud; 
       case "Zmęczenie": return Icons.bedtime;
       case "Spokój":
       default: return Icons.self_improvement;
@@ -226,32 +257,29 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
     }
   }
 
-  // --- LOGIKA ZAPISYWANIA ---
-  void _handleSend() {
+  void _handleSend() async {
     if (_textController.text.isEmpty) return;
     
-    // Tworzymy nowy wpis
+    // Tworzymy wpis (bez ID, baza sama nada)
     final newEntry = MoodEntry(
       date: DateTime.now(),
       text: _textController.text,
-      moodRating: 3.0, // Domyślna ocena, dopóki nie dodamy suwaka
+      moodRating: 3.0,
       category: _selectedCategory,
-      aiAnalysis: "Analiza pojawi się tutaj...", // Placeholder na Etap 3
+      aiAnalysis: "Analiza AI (do wdrożenia w Etapie 4)",
     );
 
-    // Dodajemy do listy i odświeżamy ekran
-    setState(() {
-      globalMoodHistory.add(newEntry);
-    });
+    // Zapisujemy do prawdziwej bazy danych!
+    await DatabaseService.instance.createEntry(newEntry);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text("Dodano nowy wpis!"),
-        backgroundColor: AppColors.primaryBlue,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    // Odświeżamy listę
+    _refreshEntries();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Zapisano w bazie danych!")),
+      );
+    }
     
     _textController.clear();
     FocusScope.of(context).unfocus();
@@ -259,139 +287,150 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
 
   @override
   Widget build(BuildContext context) {
-    // Odwracamy listę, żeby najnowsze wpisy były na górze (lub po lewej)
-    final recentEntries = globalMoodHistory.reversed.toList();
-
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Nagłówek
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text("Cześć, Ty 👋", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                    Text("Jak się dzisiaj czujesz?", style: TextStyle(fontSize: 16, color: AppColors.textGrey)),
-                  ],
-                ),
-                const CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.grey,
-                  child: Icon(Icons.person, color: Colors.white),
-                )
-              ],
-            ),
-            const SizedBox(height: 30),
-
-            // 2. Pole Tekstowe
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-              ),
-              child: TextField(
-                controller: _textController,
-                maxLines: null, 
-                enabled: true, 
-                decoration: InputDecoration(
-                  icon: const Icon(Icons.edit, color: AppColors.textGrey),
-                  hintText: "Napisz, co Cię spotkało...",
-                  border: InputBorder.none,
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.send, color: AppColors.primaryBlue),
-                    onPressed: _handleSend,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 30),
-
-            // 3. Wybór Kategorii
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Twój nastrój", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                Text(_selectedCategory, style: TextStyle(color: _getCategoryColor(_selectedCategory), fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 15),
-
-            // Chipsy
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _categories.map((category) {
-                  final bool isActive = _selectedCategory == category;
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedCategory = category;
-                      });
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isActive ? AppColors.textDark : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: isActive ? null : Border.all(color: Colors.grey.shade200),
-                        boxShadow: isActive ? [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0,4))] : [],
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Nagłówek
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text("Cześć, Ty 👋", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                          Text("Jak się dzisiaj czujesz?", style: TextStyle(fontSize: 16, color: AppColors.textGrey)),
+                        ],
                       ),
-                      child: Text(
-                        category,
-                        style: TextStyle(
-                          color: isActive ? Colors.white : AppColors.textGrey,
-                          fontWeight: FontWeight.bold,
+                      const CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Colors.grey,
+                        child: Icon(Icons.person, color: Colors.white),
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 30),
+
+                  // 2. Pole Tekstowe
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                    ),
+                    child: TextField(
+                      controller: _textController,
+                      maxLines: null, 
+                      enabled: true, 
+                      decoration: InputDecoration(
+                        icon: const Icon(Icons.edit, color: AppColors.textGrey),
+                        hintText: "Napisz, co Cię spotkało...",
+                        border: InputBorder.none,
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.send, color: AppColors.primaryBlue),
+                          onPressed: _handleSend,
                         ),
                       ),
                     ),
-                  );
-                }).toList(),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // 3. Wybór Kategorii
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("Twój nastrój", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text(_selectedCategory, style: TextStyle(color: _getCategoryColor(_selectedCategory), fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+
+                  // Chipsy
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _categories.map((category) {
+                        final bool isActive = _selectedCategory == category;
+                        return GestureDetector(
+                          onTap: () => setState(() => _selectedCategory = category),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isActive ? AppColors.textDark : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: isActive ? null : Border.all(color: Colors.grey.shade200),
+                              boxShadow: isActive ? [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0,4))] : [],
+                            ),
+                            child: Text(
+                              category,
+                              style: TextStyle(
+                                color: isActive ? Colors.white : AppColors.textGrey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // 4. Sekcja "Twoje Ostatnie Wpisy" (Z BAZY DANYCH)
+                  const Text("Twoje ostatnie wpisy", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 15),
+                  
+                  // FutureBuilder buduje widok na podstawie danych, które przyjdą z bazy
+                  FutureBuilder<List<MoodEntry>>(
+                    future: _entriesFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      } else if (snapshot.hasError) {
+                        return Text("Błąd bazy danych: ${snapshot.error}");
+                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20.0),
+                            child: Text("Twój dziennik jest pusty.\nZapisz coś, a zostanie to w pamięci telefonu!", 
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: AppColors.textGrey.withOpacity(0.5))),
+                          ),
+                        );
+                      } else {
+                        final entries = snapshot.data!;
+                        return ListView.builder(
+                          shrinkWrap: true, 
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: entries.length,
+                          itemBuilder: (context, index) {
+                            final entry = entries[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16.0),
+                              child: _buildMoodCard(
+                                title: entry.category,
+                                subtitle: entry.text,
+                                color: _getCategoryColor(entry.category),
+                                icon: _getCategoryIcon(entry.category),
+                                date: entry.date,
+                              ),
+                            );
+                          },
+                        );
+                      }
+                    },
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 30),
-
-            // 4. Sekcja "Twoje Ostatnie Wpisy" (Dynamiczna)
-            const Text("Twoje ostatnie wpisy", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 15),
-            
-            if (recentEntries.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Text("Twój dziennik jest pusty.\nDodaj pierwszy wpis powyżej!", 
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textGrey.withOpacity(0.5))),
-                ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true, // Ważne: pozwala liście być wewnątrz ScrollView
-                physics: const NeverScrollableScrollPhysics(), // Przewijanie obsłuży główny ekran
-                itemCount: recentEntries.length,
-                itemBuilder: (context, index) {
-                  final entry = recentEntries[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: _buildMoodCard(
-                      title: entry.category,
-                      subtitle: entry.text,
-                      color: _getCategoryColor(entry.category),
-                      icon: _getCategoryIcon(entry.category),
-                      date: entry.date,
-                    ),
-                  );
-                },
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -404,7 +443,7 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
     required DateTime date,
   }) {
     return Container(
-      height: 180, // Nieco mniejsza wysokość dla listy
+      height: 180,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color,
@@ -428,7 +467,7 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                 decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(12)),
                 child: Icon(icon, color: Colors.white),
               ),
-              Text(DateFormat('HH:mm').format(date), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text(DateFormat('d MMM, HH:mm').format(date), style: const TextStyle(color: Colors.white70, fontSize: 12)),
             ],
           ),
           Column(

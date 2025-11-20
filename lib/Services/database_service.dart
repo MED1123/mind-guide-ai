@@ -1,0 +1,82 @@
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
+import '../main.dart'; // Importujemy, żeby mieć dostęp do klasy MoodEntry
+
+class DatabaseService {
+  static final DatabaseService instance = DatabaseService._init();
+  static Database? _database;
+
+  DatabaseService._init();
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDB('mood_journal.db');
+    return _database!;
+  }
+
+  Future<Database> _initDB(String filePath) async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, filePath);
+
+    return await openDatabase(
+      path, 
+      version: 1, 
+      onCreate: _createDB
+    );
+  }
+
+  Future<void> _createDB(Database db, int version) async {
+    // Tworzymy tabelę, która przechowuje nasze wpisy
+    // TEXT, INTEGER, REAL to typy danych w SQL
+    await db.execute('''
+    CREATE TABLE mood_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      text TEXT NOT NULL,
+      moodRating REAL NOT NULL,
+      category TEXT NOT NULL,
+      aiAnalysis TEXT NOT NULL
+    )
+    ''');
+  }
+
+  // --- FUNKCJE DO UŻYWANIA W APLIKACJI ---
+
+  // 1. Dodaj wpis
+  Future<int> createEntry(MoodEntry entry) async {
+    final db = await instance.database;
+    // Convertujemy nasz obiekt MoodEntry na mapę (format zrozumiały dla bazy)
+    return await db.insert('mood_entries', {
+      'date': entry.date.toIso8601String(),
+      'text': entry.text,
+      'moodRating': entry.moodRating,
+      'category': entry.category,
+      'aiAnalysis': entry.aiAnalysis,
+    });
+  }
+
+  // 2. Pobierz wszystkie wpisy (od najnowszego)
+  Future<List<MoodEntry>> readAllEntries() async {
+    final db = await instance.database;
+    final result = await db.query('mood_entries', orderBy: 'date DESC');
+
+    return result.map((json) => MoodEntry(
+      id: json['id'] as int?,
+      date: DateTime.parse(json['date'] as String),
+      text: json['text'] as String,
+      moodRating: json['moodRating'] as double,
+      category: json['category'] as String,
+      aiAnalysis: json['aiAnalysis'] as String,
+    )).toList();
+  }
+  
+  // 3. Usuń wpis (przyda się w przyszłości)
+  Future<int> deleteEntry(int id) async {
+    final db = await instance.database;
+    return await db.delete(
+      'mood_entries',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+}
