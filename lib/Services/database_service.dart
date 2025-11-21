@@ -1,6 +1,5 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import '../main.dart';
 import '../models/mood_entry.dart';
 
 class DatabaseService {
@@ -18,8 +17,6 @@ class DatabaseService {
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
-    print("📂 Ścieżka do bazy danych: $path");
-
     return await openDatabase(path, version: 1, onCreate: _createDB);
   }
 
@@ -80,5 +77,11 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [entry.id],
     );
+  }
+
+  // --- NOWA METODA ---
+  Future<int> deleteEntry(int id) async {
+    final db = await instance.database;
+    return await db.delete('mood_entries', where: 'id = ?', whereArgs: [id]);
   }
 }

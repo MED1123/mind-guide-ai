@@ -191,27 +191,155 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
 
   void _goToCalendar() {
     setState(() {
-      _currentIndex = 1; // Przełącza na zakładkę Kalendarz
-      _calendarKey.currentState?._loadEvents(); // Odświeżamy kalendarz
+      _currentIndex = 1;
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _calendarKey.currentState?._loadEvents();
+      });
     });
   }
 
   void _openChatWithEntry(MoodEntry entry) {
     setState(() {
       _activeChatEntry = entry;
-      _currentIndex = 2; // Przełączamy na zakładkę Czat
+      _currentIndex = 2;
     });
+  }
+
+  // --- HOTFIX: ZARZĄDZANIE WPISEM (EDYCJA / USUWANIE) ---
+  void _handleEntryTap(MoodEntry entry) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Zarządzaj wpisem",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Co chcesz zrobić z tym wpisem?",
+              style: TextStyle(color: AppColors.textGrey),
+            ),
+            const SizedBox(height: 20),
+
+            // Opcja 1: Czat (tylko jeśli istnieje historia)
+            if (entry.conversation.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _openChatWithEntry(entry);
+                    },
+                    icon: const Icon(Icons.chat),
+                    label: const Text("Kontynuuj rozmowę"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+
+            // Opcja 2: Edycja
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _openEditScreen(entry);
+                },
+                icon: const Icon(Icons.edit),
+                label: const Text("Edytuj treść / AI"),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Opcja 3: Usuń
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _confirmDelete(entry);
+                },
+                icon: const Icon(Icons.delete, color: Colors.red),
+                label: const Text(
+                  "Usuń wpis",
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(MoodEntry entry) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Usuń wpis"),
+        content: const Text(
+          "Czy na pewno chcesz usunąć ten wpis? Tego nie można cofnąć.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Anuluj"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await DatabaseService.instance.deleteEntry(entry.id!);
+              _refreshAll();
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text("Usunięto wpis")));
+            },
+            child: const Text(
+              "Usuń",
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openEditScreen(MoodEntry entry) async {
+    // Oczekiwanie na wynik edycji
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => EditEntryScreen(entry: entry)),
+    );
+
+    // Jeśli zwrócono "open_chat", otwieramy czat z nowym wpisem
+    if (result != null && result is MoodEntry) {
+      _openChatWithEntry(result);
+    }
+
+    _refreshAll();
+  }
+
+  void _refreshAll() {
+    _homeKey.currentState?.refreshEntries();
+    _calendarKey.currentState?._loadEvents();
   }
 
   void _backToHome() {
     setState(() {
       _currentIndex = 0;
-      _homeKey.currentState?.refreshEntries();
-      _calendarKey.currentState?._loadEvents();
+      _refreshAll();
     });
   }
 
-  // Funkcja wywoływana z Home po dodaniu wpisu
   void _handlePostCreated(MoodEntry entry, bool wantAI) {
     if (wantAI) {
       _openChatWithEntry(entry);
@@ -254,9 +382,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
               subtitle: const Text("Opisz jak się teraz czujesz"),
               onTap: () {
                 Navigator.pop(context);
-                setState(() {
-                  _currentIndex = 0; // Wracamy do Home żeby dodać wpis
-                });
+                setState(() => _currentIndex = 0);
               },
             ),
             const SizedBox(height: 10),
@@ -317,7 +443,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                       entry: entry,
                       onTap: () {
                         Navigator.pop(context);
-                        _openChatWithEntry(entry);
+                        _handleEntryTap(entry); // Używamy nowego pop-upa
                       },
                     ),
                   );
@@ -350,7 +476,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
           ),
           child: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
               child: Row(
                 children: [
                   _buildNavItem(Icons.home_filled, 0, "Start"),
@@ -371,14 +497,15 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
       case 0:
         return HomeScreenUI(
           key: _homeKey,
-          onOpenChat: _openChatWithEntry,
+          onOpenChat:
+              _handleEntryTap, // <-- KLUCZOWE: Przekazujemy funkcję z POP-UPEM
           onGoToCalendar: _goToCalendar,
-          onPostCreated: _handlePostCreated, // Przekazujemy nową logikę
+          onPostCreated: _handlePostCreated,
         );
       case 1:
         return CalendarScreen(
           key: _calendarKey,
-          onOpenChat: _openChatWithEntry,
+          onOpenChat: _handleEntryTap, // <-- TUTAJ TEŻ POP-UP
         );
       case 2:
         if (_activeChatEntry == null) {
@@ -463,27 +590,29 @@ class MoodCard extends StatelessWidget {
   const MoodCard({super.key, required this.entry, this.onTap});
 
   Color _getCategoryColor(String category) {
-    if (category.contains("Radość") || category == "Radość")
+    if (category.contains("Radość") || category.contains("radosny"))
       return Colors.orange;
-    if (category.contains("Stres") || category == "Stres")
+    if (category.contains("Stres") || category.contains("zestresowany"))
       return AppColors.cardRed;
-    if (category.contains("Smutek") || category == "Smutek")
+    if (category.contains("Smutek") || category.contains("smutny"))
       return Colors.blueGrey;
-    if (category.contains("Zmęczenie") || category == "Zmęczenie")
+    if (category.contains("Zmęczenie") || category.contains("zmęczony"))
       return Colors.purple;
-    if (category.contains("Złość") || category == "Złość")
+    if (category.contains("Złość") || category.contains("zły"))
       return AppColors.angerRed;
-    return AppColors.cardBlue; // Spokój i inne
+    return AppColors.cardBlue;
   }
 
   IconData _getCategoryIcon(String category) {
-    if (category.contains("Radość") || category == "Radość")
+    if (category.contains("Radość") || category.contains("radosny"))
       return Icons.sentiment_very_satisfied;
-    if (category.contains("Stres") || category == "Stres") return Icons.bolt;
-    if (category.contains("Smutek") || category == "Smutek") return Icons.cloud;
-    if (category.contains("Zmęczenie") || category == "Zmęczenie")
+    if (category.contains("Stres") || category.contains("zestresowany"))
+      return Icons.bolt;
+    if (category.contains("Smutek") || category.contains("smutny"))
+      return Icons.cloud;
+    if (category.contains("Zmęczenie") || category.contains("zmęczony"))
       return Icons.bedtime;
-    if (category.contains("Złość") || category == "Złość")
+    if (category.contains("Złość") || category.contains("zły"))
       return Icons.whatshot;
     return Icons.self_improvement;
   }
@@ -562,11 +691,204 @@ class MoodCard extends StatelessWidget {
   }
 }
 
-// --- 7. EKRAN GŁÓWNY (HOME) - ZMODYFIKOWANY ---
+// --- NOWY EKRAN EDYCJI ---
+class EditEntryScreen extends StatefulWidget {
+  final MoodEntry entry;
+  const EditEntryScreen({super.key, required this.entry});
+
+  @override
+  State<EditEntryScreen> createState() => _EditEntryScreenState();
+}
+
+class _EditEntryScreenState extends State<EditEntryScreen> {
+  late TextEditingController _textController;
+  bool _wantAI = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.entry.text);
+    // Jeśli rozmowa już istnieje, domyślnie włączamy AI
+    _wantAI = widget.entry.conversation.isNotEmpty;
+  }
+
+  void _saveChanges() async {
+    if (_textController.text.isEmpty) return;
+
+    // Logika AI:
+    String conversationData = widget.entry.conversation;
+
+    if (_wantAI) {
+      // Jeśli użytkownik chce AI, a rozmowa jest pusta -> Inicjujemy
+      if (conversationData.isEmpty) {
+        conversationData = "User: ${_textController.text}|";
+      }
+      // Jeśli rozmowa już była, zostawiamy ją (asystent zobaczy nową treść przy ewentualnym odświeżeniu promptu,
+      // choć w tym prostym modelu historia jest w conversation.
+      // Można tu ewentualnie wyczyścić conversation, żeby AI odniosło się do nowej treści,
+      // ale bezpieczniej zostawić historię).
+    } else {
+      // Jeśli użytkownik wyłączył AI -> Czyścimy rozmowę?
+      // Decyzja: Tak, wyłączenie asystenta "resetuje" tryb czatu dla tego wpisu.
+      conversationData = "";
+    }
+
+    final updatedEntry = MoodEntry(
+      id: widget.entry.id,
+      date: widget.entry.date,
+      text: _textController.text,
+      moodRating: widget.entry.moodRating,
+      category: widget.entry.category,
+      aiAnalysis: widget.entry.aiAnalysis,
+      conversation: conversationData,
+    );
+
+    await DatabaseService.instance.updateEntry(updatedEntry);
+
+    if (!mounted) return;
+
+    // Jeśli użytkownik włączył AI, zwracamy ten obiekt, żeby MainAppScaffold wiedział, że ma otworzyć czat
+    if (_wantAI) {
+      Navigator.pop(context, updatedEntry);
+    } else {
+      Navigator.pop(context, null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.backgroundWhite,
+      appBar: AppBar(title: const Text("Edycja wpisu")),
+      body: SingleChildScrollView(
+        // Dodano ScrollView na wypadek małych ekranów
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Edytuj treść:",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _textController,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.all(16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 30),
+
+            // Zawsze pokazujemy opcję włączenia/wyłączenia AI
+            const Text(
+              "Pomoc Asystenta AI",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              "Czy chcesz, aby asystent przeanalizował ten wpis?",
+              style: TextStyle(color: AppColors.textGrey, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _wantAI = false),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: !_wantAI ? AppColors.primaryBlue : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primaryBlue),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Nie",
+                          style: TextStyle(
+                            color: !_wantAI ? Colors.white : AppColors.textGrey,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _wantAI = true),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _wantAI ? AppColors.primaryBlue : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primaryBlue),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Tak (Czat)",
+                          style: TextStyle(
+                            color: _wantAI ? Colors.white : AppColors.textGrey,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 40),
+
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                onPressed: _saveChanges,
+                child: const Text(
+                  "Zapisz zmiany",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- 7. EKRAN GŁÓWNY (HOME) ---
 class HomeScreenUI extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
   final VoidCallback? onGoToCalendar;
-  // Nowy callback do obsługi logiki wysyłania (z AI lub bez)
   final Function(MoodEntry, bool)? onPostCreated;
 
   const HomeScreenUI({
@@ -585,7 +907,7 @@ class HomeScreenUI extends StatefulWidget {
 class _HomeScreenUIState extends State<HomeScreenUI> {
   final TextEditingController _textController = TextEditingController();
   String? _selectedCategory;
-  bool _wantAI = false; // Stan przełącznika AI
+  bool _wantAI = false;
 
   final List<String> _categories = [
     "Jestem spokojny 😌",
@@ -593,7 +915,7 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
     "Jestem zestresowany 😫",
     "Jestem smutny 😔",
     "Jestem zmęczony 😴",
-    "Jestem zły 😡", // Złość jest dodana
+    "Jestem zły 😡",
   ];
 
   late Future<List<MoodEntry>> _entriesFuture;
@@ -610,27 +932,35 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
     });
   }
 
+  bool _isPositiveMood(String category) {
+    final lower = category.toLowerCase();
+    return lower.contains("radosny") || lower.contains("spokojny");
+  }
+
   String _getFeelingWord(String fullCategory) {
     List<String> parts = fullCategory.split(' ');
     if (parts.length >= 2) return parts[1];
     return "tak";
   }
 
-  // Inteligentna podpowiedź
   String _getHintText() {
     if (_selectedCategory == null) return "";
-    if (_selectedCategory!.contains("Radość") ||
-        _selectedCategory!.contains("Spokój")) {
+    if (_isPositiveMood(_selectedCategory!)) {
       return "To wspaniale! Wpisz do dziennika, jak minął Ci dzień 😁";
     }
     return "Dlaczego czujesz się ${_getFeelingWord(_selectedCategory!)}?\nNasz asystent AI chętnie Ci pomoże...";
   }
 
+  void _onCategorySelected(String category) {
+    setState(() {
+      _selectedCategory = category;
+      _wantAI = !_isPositiveMood(category);
+    });
+  }
+
   void _handleSend() async {
     if (_textController.text.isEmpty || _selectedCategory == null) return;
 
-    // Jeśli user nie chce AI, zapisujemy pustą rozmowę, żeby trigger w ChatScreen nie zadziałał
-    // Ale jeśli chce AI, zapisujemy zalążek, żeby trigger zadziałał
     String conversationInit = _wantAI ? "User: ${_textController.text}|" : "";
 
     final newEntry = MoodEntry(
@@ -642,10 +972,8 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
       conversation: conversationInit,
     );
 
-    // 1. Zapis do bazy
     int id = await DatabaseService.instance.createEntry(newEntry);
 
-    // 2. Tworzymy obiekt z ID, żeby móc go otworzyć
     final entryWithId = MoodEntry(
       id: id,
       date: newEntry.date,
@@ -658,11 +986,12 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
 
     refreshEntries();
 
-    // Reset UI
+    bool userWantedAI = _wantAI;
+
     _textController.clear();
     setState(() {
       _selectedCategory = null;
-      _wantAI = false; // Resetujemy wybór
+      _wantAI = false;
     });
     FocusScope.of(context).unfocus();
 
@@ -670,9 +999,8 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
       context,
     ).showSnackBar(const SnackBar(content: Text("Zapisano wpis!")));
 
-    // 3. Decyzja o nawigacji
     if (widget.onPostCreated != null) {
-      widget.onPostCreated!(entryWithId, _wantAI);
+      widget.onPostCreated!(entryWithId, userWantedAI);
     }
   }
 
@@ -687,7 +1015,6 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. NAGŁÓWEK
                   const SizedBox(height: 10),
                   Text(
                     "Jak się dzisiaj czujesz?",
@@ -698,20 +1025,13 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                   ),
                   const SizedBox(height: 32),
 
-                  // 2. KATEGORIE
                   Wrap(
                     spacing: 10,
                     runSpacing: 12,
                     children: _categories.map((category) {
                       final isSelected = _selectedCategory == category;
                       return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedCategory = category;
-                            // Domyślnie AI wyłączone dla pozytywnych, włączone dla negatywnych?
-                            // Na razie zostawiamy domyślnie false, użytkownik wybierze.
-                          });
-                        },
+                        onTap: () => _onCategorySelected(category),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           padding: const EdgeInsets.symmetric(
@@ -755,7 +1075,6 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                     }).toList(),
                   ),
 
-                  // 3. FORMULARZ (WARUNKOWY)
                   AnimatedSize(
                     duration: const Duration(milliseconds: 300),
                     child: _selectedCategory == null
@@ -794,7 +1113,6 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                                         ),
                                       ),
                                     ),
-                                    // Ikonka galerii
                                     Padding(
                                       padding: const EdgeInsets.only(
                                         left: 16,
@@ -837,9 +1155,7 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                                       fontSize: 16,
                                     ),
                                   ),
-                                  const SizedBox(
-                                    height: 12,
-                                  ), // Odstęp między pytaniem a guzikami
+                                  const SizedBox(height: 12),
                                   Row(
                                     children: [
                                       Expanded(
@@ -862,19 +1178,18 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                                 ],
                               ),
 
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 24),
 
-                              // DUŻY PRZYCISK WYŚLIJ
                               SizedBox(
                                 width: double.infinity,
-                                height: 50,
+                                height: 54,
                                 child: ElevatedButton(
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primaryBlue,
                                     foregroundColor: Colors.white,
-                                    elevation: 0,
+                                    elevation: 2,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(18),
                                     ),
                                   ),
                                   onPressed: _handleSend,
@@ -893,7 +1208,6 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
 
                   const SizedBox(height: 40),
 
-                  // 4. LISTA WPISÓW
                   const Text(
                     "Twoje ostatnie wpisy",
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -927,7 +1241,8 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                                 padding: const EdgeInsets.only(bottom: 16.0),
                                 child: MoodCard(
                                   entry: entry,
-                                  onTap: () => widget.onOpenChat(entry),
+                                  onTap: () =>
+                                      widget.onOpenChat(entry), // Pop-up
                                 ),
                               );
                             },
@@ -957,10 +1272,11 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isActive ? AppColors.primaryBlue : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+          color: isActive ? AppColors.primaryBlue : Colors.white,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isActive ? AppColors.primaryBlue : Colors.grey.shade300,
           ),
@@ -968,7 +1284,7 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
         child: Text(
           label,
           style: TextStyle(
-            color: isActive ? Colors.white : Colors.grey,
+            color: isActive ? Colors.white : AppColors.textGrey,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -1188,14 +1504,11 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadMessagesFromEntry();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Logika Auto-startu: Jeśli to wpis z treścią, ale bez historii, a kategoria nie jest "Rozmowa" (czyli pusty czat), to AI startuje
-      // Uwaga: Teraz w Home zapisujemy "User: ...|" tylko jeśli wybrano AI. Więc jeśli conversation jest puste, AI nie ruszy.
-      // To jest pożądane zachowanie (jeśli user wybrał "NIE" dla AI).
-
+      // HOTFIX: Auto-start tylko jeśli użytkownik zainicjował rozmowę (wybrał TAK dla AI)
+      // oraz jest to pierwsza wiadomość.
       if (_messages.length == 1 &&
           _messages[0]['role'] == 'user' &&
           _currentEntry.conversation.startsWith("User:")) {
-        // Tu sprawdzamy, czy wpis ma zainicjowaną konwersację
         _triggerAutoReply();
       }
     });
