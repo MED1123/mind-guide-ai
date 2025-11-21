@@ -187,8 +187,13 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   final GlobalKey<_HomeScreenUIState> _homeKey = GlobalKey();
   final GlobalKey<_CalendarScreenState> _calendarKey = GlobalKey();
 
-  // Zmienna przechowująca wpis, o którym aktualnie rozmawiamy
   MoodEntry? _activeChatEntry;
+
+  void _goToCalendar() {
+    setState(() {
+      _currentIndex = 1; // Przełącza na zakładkę Kalendarz
+    });
+  }
 
   void _handleChatTabTap() {
     showModalBottomSheet(
@@ -322,19 +327,17 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
     _openChatWithEntry(entryWithId);
   }
 
-  // Zmiana: Zamiast Navigator.push, zmieniamy stan głównego widoku
   void _openChatWithEntry(MoodEntry entry) {
     setState(() {
       _activeChatEntry = entry;
-      _currentIndex = 2; // Przełączamy na zakładkę Czat
+      _currentIndex = 2;
     });
   }
 
-  // Powrót z czatu do Home
   void _backToHome() {
     setState(() {
       _currentIndex = 0;
-      _homeKey.currentState?.refreshEntries(); // Odświeżamy listę po powrocie
+      _homeKey.currentState?.refreshEntries();
       _calendarKey.currentState?._loadEvents();
     });
   }
@@ -345,7 +348,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
       onTap: () => FocusScope.of(context).unfocus(),
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
-        // Zamiast IndexedStack, używamy warunku dla czatu, by wymusić odświeżenie przy zmianie wpisu
         body: _buildBody(),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
@@ -360,7 +362,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
           ),
           child: SafeArea(
             child: Padding(
-              // Zmniejszony padding zgodnie z życzeniem
               padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 6),
               child: Row(
                 children: [
@@ -380,7 +381,11 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   Widget _buildBody() {
     switch (_currentIndex) {
       case 0:
-        return HomeScreenUI(key: _homeKey, onOpenChat: _openChatWithEntry);
+        return HomeScreenUI(
+          key: _homeKey,
+          onOpenChat: _openChatWithEntry,
+          onGoToCalendar: _goToCalendar,
+        );
       case 1:
         return CalendarScreen(
           key: _calendarKey,
@@ -388,15 +393,9 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
         );
       case 2:
         if (_activeChatEntry == null) {
-          // Jeśli user kliknie ikonę Asystenta bez wybrania wpisu, pokazujemy menu
-          // Ale ponieważ onTap na ikonie otwiera modal, ten stan jest rzadki.
-          // Dajemy tu pusty ekran, a modal się otworzy.
           return const Center(child: Text("Wybierz temat rozmowy w menu"));
         }
-        return ChatScreen(
-          entry: _activeChatEntry!,
-          onBack: _backToHome, // Przekazujemy funkcję powrotu
-        );
+        return ChatScreen(entry: _activeChatEntry!, onBack: _backToHome);
       case 3:
         return const PlaceholderScreen(title: "Profil");
       default:
@@ -404,21 +403,17 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
     }
   }
 
-  // Ikona czatu - teraz zachowuje się wizualnie jak inne (szara/niebieska)
-  // Ale jej kliknięcie otwiera modal wyboru tematu
   Widget _buildChatButton(int index, String label) {
     bool isSelected = _currentIndex == index;
     return Expanded(
       child: GestureDetector(
-        onTap: _handleChatTabTap, // Zawsze otwiera modal
+        onTap: _handleChatTabTap,
         behavior: HitTestBehavior.translucent,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isSelected
-                  ? Icons.chat_bubble
-                  : Icons.chat_bubble_outline, // Wypełniona jeśli aktywna
+              isSelected ? Icons.chat_bubble : Icons.chat_bubble_outline,
               size: 28,
               color: isSelected ? AppColors.primaryBlue : Colors.grey.shade400,
             ),
@@ -588,9 +583,14 @@ class MoodCard extends StatelessWidget {
 
 // --- 7. EKRAN GŁÓWNY (HOME) ---
 class HomeScreenUI extends StatefulWidget {
-  // Dodajemy callback, żeby HomeScreen mógł otworzyć czat w głównym Scaffoldzie
   final Function(MoodEntry) onOpenChat;
-  const HomeScreenUI({super.key, this.onOpenChat = _defaultOpenChat});
+  final VoidCallback? onGoToCalendar; // Callback do przejścia do kalendarza
+
+  const HomeScreenUI({
+    super.key,
+    this.onOpenChat = _defaultOpenChat,
+    this.onGoToCalendar,
+  });
 
   static void _defaultOpenChat(MoodEntry e) {}
 
@@ -729,12 +729,11 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                               color: AppColors.primaryBlue,
                               shape: BoxShape.circle,
                             ),
-                            // Zmiana ikony na strzałkę w prawo
                             child: const Icon(
                               Icons.arrow_forward,
                               color: Colors.white,
                               size: 20,
-                            ),
+                            ), // Strzałka w prawo
                           ),
                           onPressed: _handleSend,
                         ),
@@ -803,7 +802,7 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                   ),
                   const SizedBox(height: 32),
 
-                  // LISTA WPISÓW
+                  // LISTA WPISÓW (Limit do 4 + Przycisk)
                   const Text(
                     "Ostatnie wpisy",
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -820,22 +819,36 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
                           ),
                         );
                       }
-                      return ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: snapshot.data!.length,
-                        itemBuilder: (context, index) {
-                          final entry = snapshot.data![index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0),
-                            child: MoodCard(
-                              entry: entry,
-                              onTap: () => widget.onOpenChat(
-                                entry,
-                              ), // Używamy callbacka z Main
+
+                      final allEntries = snapshot.data!;
+                      final displayEntries = allEntries
+                          .take(4)
+                          .toList(); // Bierzemy max 4
+                      final showMoreButton = allEntries.length > 4;
+
+                      return Column(
+                        children: [
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: displayEntries.length,
+                            itemBuilder: (context, index) {
+                              final entry = displayEntries[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: MoodCard(
+                                  entry: entry,
+                                  onTap: () => widget.onOpenChat(entry),
+                                ),
+                              );
+                            },
+                          ),
+                          if (showMoreButton)
+                            TextButton(
+                              onPressed: widget.onGoToCalendar,
+                              child: const Text("Zobacz wszystkie wpisy"),
                             ),
-                          );
-                        },
+                        ],
                       );
                     },
                   ),
@@ -849,7 +862,7 @@ class _HomeScreenUIState extends State<HomeScreenUI> {
   }
 }
 
-// --- 8. EKRAN KALENDARZA ---
+// --- 8. EKRAN KALENDARZA (POPRAWIONY) ---
 class CalendarScreen extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
   const CalendarScreen({super.key, this.onOpenChat = _defaultOpenChat});
@@ -906,136 +919,133 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final selectedEvents = _getEventsForDay(_selectedDay ?? _focusedDay);
 
     return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Row(
-              children: [
-                Text(
-                  " Twój Kalendarz",
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-              ],
-            ),
-          ),
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            elevation: 0,
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
+      child: CustomScrollView(
+        slivers: [
+          // Nagłówek Kalendarza
+          SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: TableCalendar(
-                firstDay: DateTime.utc(2024, 1, 1),
-                lastDay: DateTime.utc(2030, 12, 31),
-                focusedDay: _focusedDay,
-                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                calendarFormat: CalendarFormat.month,
-                startingDayOfWeek: StartingDayOfWeek.monday,
-                headerStyle: const HeaderStyle(
-                  formatButtonVisible: false,
-                  titleCentered: true,
-                  titleTextStyle: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+              padding: const EdgeInsets.all(24.0),
+              child: Text(
+                " Twój Kalendarz",
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+            ),
+          ),
+          // Kalendarz Widget
+          SliverToBoxAdapter(
+            child: Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              elevation: 0,
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: TableCalendar(
+                  firstDay: DateTime.utc(2024, 1, 1),
+                  lastDay: DateTime.utc(2030, 12, 31),
+                  focusedDay: _focusedDay,
+                  selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                  calendarFormat: CalendarFormat.month,
+                  startingDayOfWeek: StartingDayOfWeek.monday,
+                  daysOfWeekHeight:
+                      30, // NAPRAWA: Zapobiega ucięciu dni tygodnia
+                  headerStyle: const HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                    titleTextStyle: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                calendarStyle: const CalendarStyle(
-                  selectedDecoration: BoxDecoration(
-                    color: AppColors.primaryBlue,
-                    shape: BoxShape.circle,
+                  calendarStyle: const CalendarStyle(
+                    selectedDecoration: BoxDecoration(
+                      color: AppColors.primaryBlue,
+                      shape: BoxShape.circle,
+                    ),
+                    todayDecoration: BoxDecoration(
+                      color: Color(0x4D0D47A1),
+                      shape: BoxShape.circle,
+                    ),
+                    weekendTextStyle: TextStyle(color: AppColors.textGrey),
                   ),
-                  todayDecoration: BoxDecoration(
-                    color: Color(0x4D0D47A1),
-                    shape: BoxShape.circle,
-                  ),
-                  weekendTextStyle: TextStyle(color: AppColors.textGrey),
-                ),
-                eventLoader: _getEventsForDay,
-                onDaySelected: (selectedDay, focusedDay) {
-                  setState(() {
-                    _selectedDay = selectedDay;
-                    _focusedDay = focusedDay;
-                  });
-                },
-                calendarBuilders: CalendarBuilders(
-                  markerBuilder: (context, day, events) {
-                    if (events.isEmpty) return null;
-                    final entries = events as List<MoodEntry>;
-                    final color = _getDotColor(entries.first.category);
-                    return Positioned(
-                      bottom: 1,
-                      child: Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    );
+                  eventLoader: _getEventsForDay,
+                  onDaySelected: (selectedDay, focusedDay) {
+                    setState(() {
+                      _selectedDay = selectedDay;
+                      _focusedDay = focusedDay;
+                    });
                   },
+                  calendarBuilders: CalendarBuilders(
+                    markerBuilder: (context, day, events) {
+                      if (events.isEmpty) return null;
+                      final entries = events as List<MoodEntry>;
+                      final color = _getDotColor(entries.first.category);
+                      return Positioned(
+                        bottom: 1,
+                        child: Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          // Nagłówek listy wpisów
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 30, 24, 10),
+              child: Text(
+                _selectedDay != null
+                    ? "Wpisy z ${DateFormat('d MMMM').format(_selectedDay!)}"
+                    : "Wybierz dzień",
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 10),
-                    child: Text(
-                      _selectedDay != null
-                          ? "Wpisy z ${DateFormat('d MMMM').format(_selectedDay!)}"
-                          : "Wybierz dzień",
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+            ),
+          ),
+          // Lista wpisów (SliverList pozwala na pełne przewijanie strony)
+          selectedEvents.isEmpty
+              ? SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(30.0),
+                    child: Center(
+                      child: Text(
+                        "Brak wpisów",
+                        style: TextStyle(
+                          color: AppColors.textGrey.withOpacity(0.5),
+                        ),
                       ),
                     ),
                   ),
-                  Expanded(
-                    child: selectedEvents.isEmpty
-                        ? Center(
-                            child: Text(
-                              "Brak wpisów",
-                              style: TextStyle(
-                                color: AppColors.textGrey.withOpacity(0.5),
-                              ),
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            itemCount: selectedEvents.length,
-                            itemBuilder: (context, index) {
-                              final entry = selectedEvents[index];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12.0),
-                                child: MoodCard(
-                                  entry: entry,
-                                  onTap: () => widget.onOpenChat(
-                                    entry,
-                                  ), // Callback do otwarcia czatu
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+                )
+              : SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final entry = selectedEvents[index];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 6,
+                      ),
+                      child: MoodCard(
+                        entry: entry,
+                        onTap: () => widget.onOpenChat(entry),
+                      ),
+                    );
+                  }, childCount: selectedEvents.length),
+                ),
+          // Odstęp na dole
+          const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
       ),
     );
@@ -1045,7 +1055,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 // --- 9. EKRAN CZATU (Wbudowany w zakładkę) ---
 class ChatScreen extends StatefulWidget {
   final MoodEntry entry;
-  final VoidCallback onBack; // Callback do powrotu na Start
+  final VoidCallback onBack;
 
   const ChatScreen({super.key, required this.entry, required this.onBack});
 
@@ -1066,7 +1076,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _currentEntry = widget.entry;
     _loadMessagesFromEntry();
 
-    // AUTOMATYCZNA ODPOWIEDŹ (Jeśli wchodzimy z historii, a nie było czatu)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_messages.length == 1 &&
           _messages[0]['role'] == 'user' &&
@@ -1183,7 +1192,6 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
-        // Zmiana: Przycisk Wróć wywołuje callback, a nie Navigator.pop
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
           onPressed: widget.onBack,
@@ -1318,8 +1326,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Text(
                       msg['text']!,
                       style: TextStyle(
-                        fontSize:
-                            appSettings.fontSize, // Użycie ustawień czcionki
+                        fontSize: appSettings.fontSize,
                         color: isUser ? Colors.white : AppColors.textDark,
                         height: 1.4,
                       ),
