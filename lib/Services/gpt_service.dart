@@ -36,24 +36,35 @@ class GptService {
         ? "Jesteś empatyczną asystentką psychologiczną. Twoje odpowiedzi są ciepłe, zrozumiałe i wspierające."
         : "Jesteś konkretnym, ale empatycznym asystentem psychologicznym. Twoje odpowiedzi są rzeczowe i wspierające.";
 
-    String fullPrompt =
-        """
-    $systemPrompt
-    
-    Historia dotychczasowej rozmowy:
-    $history
-    
-    Użytkownik właśnie napisał:
-    $userInput
-    
-    Odpowiedz użytkownikowi.
-    """;
+    // Utwórz listę wiadomości, włączając prompt systemowy
+    List<Map<String, String>> messages = [
+      {"role": "system", "content": systemPrompt},
+    ];
+
+    // Dodaj historię rozmowy
+    final historyParts = history.split('|');
+    for (var part in historyParts) {
+      if (part.startsWith("User: ")) {
+        messages.add({"role": "user", "content": part.substring(6)});
+      } else if (part.startsWith("AI: ")) {
+        messages.add({"role": "assistant", "content": part.substring(4)});
+      }
+    }
+
+    // Dodaj najnowszą wiadomość użytkownika (userInput) jako ostatnią wiadomość
+    messages.add({"role": "user", "content": userInput});
+
+    // ZAPOBIEGANIE BŁĘDOWI - jeśli to pierwsza wiadomość, usuwamy duplikat.
+    // Zdarza się to, gdy history ma postać "User: ..." i to jest ten sam tekst co userInput
+    if (messages.length >= 3 &&
+        messages[messages.length - 1]['content'] ==
+            messages[messages.length - 2]['content']) {
+      messages.removeAt(messages.length - 1);
+    }
 
     final body = jsonEncode({
       "model": "x-ai/grok-4.1-fast", // Wybrany model
-      "messages": [
-        {"role": "user", "content": fullPrompt},
-      ],
+      "messages": messages,
       // Dodajemy parametr reasoning, którego wymaga ten model (zgodnie z Twoim przykładem)
       "reasoning": {"enabled": true},
     });
