@@ -1,46 +1,56 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# Pliki konfiguracyjne środowiska (KLUCZOWE)
+.env
+*.env
 
-# IntelliJ related
+# Flutter/Dart - pliki generowane automatycznie
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Android - pliki lokalne i generowane
+android/local.properties
+android/.gradle
+android/app/build
+android/key.properties
+android/*.jks
+android/*.keystore
+
+# iOS - pliki generowane
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Pods/
+ios/.symlinks/
+
+# macOS - pliki generowane
+macos/Flutter/ephemeral/
+macos/Pods/
+
+# Windows - pliki generowane
+windows/flutter/ephemeral/
+
+# Linux - pliki generowane
+linux/flutter/ephemeral/
+
+# Web - pliki generowane
+web/icons/Icon-192.png
+web/icons/Icon-512.png
+web/favicon.png
+
+# IDE i Edytory (ustawienia lokalne developera)
+.idea/
+.vscode/
 *.iml
 *.ipr
 *.iws
-.idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-.env
+# Systemowe (Mac/Windows)
+.DS_Store
+Thumbs.db
