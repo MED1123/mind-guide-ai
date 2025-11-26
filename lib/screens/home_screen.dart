@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bounceable/flutter_bounceable.dart';
 import '../Services/database_service.dart';
 import '../models/mood_entry.dart';
-import '../main.dart'; // Dostęp do AppColors, AppSettings
-import '../widgets/mood_card.dart'; // Dostęp do MoodCard
+import '../main.dart';
+import '../widgets/mood_card.dart';
 
-// --- 7. EKRAN GŁÓWNY (HOME) ---
 class HomeScreenUI extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
   final VoidCallback? onGoToCalendar;
@@ -20,11 +21,9 @@ class HomeScreenUI extends StatefulWidget {
   static void _defaultOpenChat(MoodEntry e) {}
 
   @override
-  // ZMIANA: Odwołujemy się do publicznej klasy stanu
   State<HomeScreenUI> createState() => HomeScreenUIState();
 }
 
-// ZMIANA: Usunięto "_" z nazwy klasy, aby była publiczna
 class HomeScreenUIState extends State<HomeScreenUI> {
   final TextEditingController _textController = TextEditingController();
   String? _selectedCategory;
@@ -73,6 +72,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   }
 
   void _onCategorySelected(String category) {
+    HapticFeedback.selectionClick();
     setState(() {
       _selectedCategory = category;
       _wantAI = !_isPositiveMood(category);
@@ -80,6 +80,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   }
 
   void _handleSend() async {
+    HapticFeedback.mediumImpact();
     if (_textController.text.isEmpty || _selectedCategory == null) return;
 
     String conversationInit = _wantAI ? "User: ${_textController.text}|" : "";
@@ -127,6 +128,15 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
   @override
   Widget build(BuildContext context) {
+    // POPRAWKA: Sprawdzamy tryb ciemny
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Kolory dla trybu ciemnego (zgodnie z życzeniem: ciemne tło, niebieska ramka)
+    final unselectedBgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final unselectedBorderColor = isDark
+        ? AppColors.primaryBlue
+        : Colors.grey.shade200;
+    final unselectedTextColor = isDark ? Colors.white : AppColors.textGrey;
+
     return SafeArea(
       child: Column(
         children: [
@@ -151,7 +161,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                     runSpacing: 12,
                     children: _categories.map((category) {
                       final isSelected = _selectedCategory == category;
-                      return GestureDetector(
+
+                      return Bounceable(
                         onTap: () => _onCategorySelected(category),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
@@ -162,12 +173,12 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? AppColors.primaryBlue
-                                : Colors.white,
+                                : unselectedBgColor, // Zmieniony kolor
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: isSelected
                                   ? AppColors.primaryBlue
-                                  : Colors.grey.shade200,
+                                  : unselectedBorderColor, // Zmieniony kolor ramki
                             ),
                             boxShadow: isSelected
                                 ? [
@@ -186,7 +197,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                             style: TextStyle(
                               color: isSelected
                                   ? Colors.white
-                                  : AppColors.textGrey,
+                                  : unselectedTextColor,
                               fontWeight: FontWeight.bold,
                               fontSize: 15,
                             ),
@@ -205,7 +216,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                               const SizedBox(height: 32),
                               Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color:
+                                      unselectedBgColor, // Ciemne tło w dark mode
                                   borderRadius: BorderRadius.circular(24),
                                   boxShadow: [
                                     BoxShadow(
@@ -221,6 +233,11 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                       controller: _textController,
                                       maxLines: 4,
                                       minLines: 2,
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? Colors.white
+                                            : Colors.black,
+                                      ),
                                       decoration: InputDecoration(
                                         hintText: _getHintText(),
                                         hintStyle: TextStyle(
@@ -247,6 +264,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                             color: AppColors.textGrey,
                                           ),
                                           onPressed: () {
+                                            HapticFeedback.lightImpact();
                                             ScaffoldMessenger.of(
                                               context,
                                             ).showSnackBar(
@@ -269,11 +287,14 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     "Czy chcesz uruchomić asystenta AI?",
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
+                                      color: Theme.of(
+                                        context,
+                                      ).textTheme.bodyLarge?.color,
                                     ),
                                   ),
                                   const SizedBox(height: 12),
@@ -281,6 +302,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                     children: [
                                       Expanded(
                                         child: _buildChoiceBtn(
+                                          context, // Przekazujemy context
                                           "Nie",
                                           !_wantAI,
                                           () => setState(() => _wantAI = false),
@@ -289,6 +311,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: _buildChoiceBtn(
+                                          context,
                                           "Tak",
                                           _wantAI,
                                           () => setState(() => _wantAI = true),
@@ -301,24 +324,29 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
                               const SizedBox(height: 24),
 
-                              SizedBox(
-                                width: double.infinity,
-                                height: 54,
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primaryBlue,
-                                    foregroundColor: Colors.white,
-                                    elevation: 2,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(18),
-                                    ),
+                              Bounceable(
+                                onTap: _handleSend,
+                                child: Container(
+                                  width: double.infinity,
+                                  height: 54,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryBlue,
+                                    borderRadius: BorderRadius.circular(18),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
-                                  onPressed: _handleSend,
+                                  alignment: Alignment.center,
                                   child: const Text(
                                     "Zapisz wpis",
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
+                                      color: Colors.white,
                                     ),
                                   ),
                                 ),
@@ -360,10 +388,14 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                               final entry = displayEntries[index];
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 16.0),
-                                child: MoodCard(
-                                  entry: entry,
-                                  onTap: () =>
-                                      widget.onOpenChat(entry), // Pop-up
+                                child: Bounceable(
+                                  scaleFactor: 0.95,
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    widget.onOpenChat(entry);
+                                  },
+                                  // POPRAWKA
+                                  child: MoodCard(entry: entry),
                                 ),
                               );
                             },
@@ -389,25 +421,37 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     );
   }
 
-  Widget _buildChoiceBtn(String label, bool isActive, VoidCallback onTap) {
-    return GestureDetector(
+  // Ulepszona metoda, obsługuje tryb ciemny
+  Widget _buildChoiceBtn(
+    BuildContext context,
+    String label,
+    bool isActive,
+    VoidCallback onTap,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isActive
+        ? AppColors.primaryBlue
+        : (isDark ? const Color(0xFF1E1E1E) : Colors.white);
+    final borderColor = isActive
+        ? AppColors.primaryBlue
+        : (isDark ? AppColors.primaryBlue : Colors.grey.shade300);
+    final textColor = isActive
+        ? Colors.white
+        : (isDark ? Colors.white : AppColors.textGrey);
+
+    return Bounceable(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isActive ? AppColors.primaryBlue : Colors.white,
+          color: bgColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isActive ? AppColors.primaryBlue : Colors.grey.shade300,
-          ),
+          border: Border.all(color: borderColor),
         ),
         child: Text(
           label,
-          style: TextStyle(
-            color: isActive ? Colors.white : AppColors.textGrey,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
         ),
       ),
     );

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bounceable/flutter_bounceable.dart';
 import '../Services/database_service.dart';
 import '../models/mood_entry.dart';
-import '../main.dart'; // Aby uzyskać dostęp do AppColors
+import '../main.dart';
 
 // --- EKRAN EDYCJI ---
 class EditEntryScreen extends StatefulWidget {
@@ -20,28 +21,19 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
   void initState() {
     super.initState();
     _textController = TextEditingController(text: widget.entry.text);
-    // Jeśli rozmowa już istnieje, domyślnie włączamy AI
     _wantAI = widget.entry.conversation.isNotEmpty;
   }
 
   void _saveChanges() async {
     if (_textController.text.isEmpty) return;
 
-    // Logika AI:
     String conversationData = widget.entry.conversation;
 
     if (_wantAI) {
-      // Jeśli użytkownik chce AI, a rozmowa jest pusta -> Inicjujemy
       if (conversationData.isEmpty) {
         conversationData = "User: ${_textController.text}|";
       }
-      // Jeśli rozmowa już była, zostawiamy ją (asystent zobaczy nową treść przy ewentualnym odświeżeniu promptu,
-      // choć w tym prostym modelu historia jest w conversation.
-      // Można tu ewentualnie wyczyścić conversation, żeby AI odniosło się do nowej treści,
-      // ale bezpieczniej zostawić historię).
     } else {
-      // Jeśli użytkownik wyłączył AI -> Czyścimy rozmowę?
-      // Decyzja: Tak, wyłączenie asystenta "resetuje" tryb czatu dla tego wpisu.
       conversationData = "";
     }
 
@@ -59,7 +51,6 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
 
     if (!mounted) return;
 
-    // Jeśli użytkownik włączył AI, zwracamy ten obiekt, żeby MainAppScaffold wiedział, że ma otworzyć czat
     if (_wantAI) {
       Navigator.pop(context, updatedEntry);
     } else {
@@ -69,23 +60,36 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Poprawa #3: Pobieramy czy jest tryb ciemny
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final containerColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
+
     return Scaffold(
-      backgroundColor: AppColors.backgroundWhite,
-      appBar: AppBar(title: const Text("Edycja wpisu")),
+      backgroundColor: backgroundColor, // Używamy koloru z motywu
+      appBar: AppBar(
+        title: const Text("Edycja wpisu"),
+        backgroundColor: backgroundColor,
+        surfaceTintColor: Colors.transparent,
+      ),
       body: SingleChildScrollView(
-        // Dodano ScrollView na wypadek małych ekranów
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               "Edytuj treść:",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
             ),
             const SizedBox(height: 10),
             Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: containerColor, // Ciemny kontener w trybie ciemnym
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
@@ -99,6 +103,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
                   TextField(
                     controller: _textController,
                     maxLines: 6,
+                    style: TextStyle(color: textColor), // Kolor tekstu
                     decoration: const InputDecoration(
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.all(16),
@@ -109,10 +114,13 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
             ),
             const SizedBox(height: 30),
 
-            // Zawsze pokazujemy opcję włączenia/wyłączenia AI
-            const Text(
+            Text(
               "Pomoc Asystenta AI",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
             ),
             const SizedBox(height: 5),
             const Text(
@@ -124,12 +132,14 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
             Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
+                  child: Bounceable(
                     onTap: () => setState(() => _wantAI = false),
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: !_wantAI ? AppColors.primaryBlue : Colors.white,
+                        color: !_wantAI
+                            ? AppColors.primaryBlue
+                            : containerColor,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.primaryBlue),
                       ),
@@ -147,12 +157,12 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: GestureDetector(
+                  child: Bounceable(
                     onTap: () => setState(() => _wantAI = true),
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: _wantAI ? AppColors.primaryBlue : Colors.white,
+                        color: _wantAI ? AppColors.primaryBlue : containerColor,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.primaryBlue),
                       ),
@@ -172,21 +182,23 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
             ),
             const SizedBox(height: 40),
 
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryBlue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+            Bounceable(
+              onTap: _saveChanges,
+              child: Container(
+                width: double.infinity,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryBlue,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                onPressed: _saveChanges,
+                alignment: Alignment.center,
                 child: const Text(
                   "Zapisz zmiany",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),

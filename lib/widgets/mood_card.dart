@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:motion/motion.dart';
 import '../models/mood_entry.dart';
-import '../main.dart'; // Aby uzyskać dostęp do AppColors
+import '../main.dart';
 
-// --- 6. WIDGET KARTY NASTROJU ---
 class MoodCard extends StatelessWidget {
   final MoodEntry entry;
-  final VoidCallback? onTap;
+  // USUNIĘTO: final VoidCallback? onTap; - nie potrzebujemy tego tutaj
 
-  const MoodCard({super.key, required this.entry, this.onTap});
+  // USUNIĘTO: this.onTap z konstruktora
+  const MoodCard({super.key, required this.entry});
 
   Color _getCategoryColor(String category) {
     if (category.contains("Radość") || category.contains("radosny"))
@@ -43,8 +44,9 @@ class MoodCard extends StatelessWidget {
     final color = _getCategoryColor(entry.category);
     final icon = _getCategoryIcon(entry.category);
 
-    return GestureDetector(
-      onTap: onTap,
+    return Motion(
+      borderRadius: BorderRadius.circular(24),
+      // USUNIĘTO: GestureDetector. Teraz MoodCard jest pasywny.
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <-- KLUCZOWY IMPORT (DODANY)
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_bounceable/flutter_bounceable.dart';
 import '../Services/database_service.dart';
 import '../models/mood_entry.dart';
-import '../main.dart'; // Potrzebne dla AppColors
-// DODANO: Import widżetu MoodCard, który został przeniesiony
+import '../main.dart';
 import '../widgets/mood_card.dart';
 
 // --- 8. EKRAN KALENDARZA ---
@@ -65,6 +66,10 @@ class CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final selectedEvents = _getEventsForDay(_selectedDay ?? _focusedDay);
+    // Obsługa trybu ciemnego
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final calendarCardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
     return SafeArea(
       child: CustomScrollView(
@@ -82,7 +87,7 @@ class CalendarScreenState extends State<CalendarScreen> {
             child: Card(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               elevation: 0,
-              color: Colors.white,
+              color: calendarCardColor,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
@@ -96,24 +101,31 @@ class CalendarScreenState extends State<CalendarScreen> {
                   calendarFormat: CalendarFormat.month,
                   startingDayOfWeek: StartingDayOfWeek.monday,
                   daysOfWeekHeight: 30,
-                  headerStyle: const HeaderStyle(
+                  headerStyle: HeaderStyle(
                     formatButtonVisible: false,
                     titleCentered: true,
                     titleTextStyle: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                    leftChevronIcon: Icon(Icons.chevron_left, color: textColor),
+                    rightChevronIcon: Icon(
+                      Icons.chevron_right,
+                      color: textColor,
                     ),
                   ),
-                  calendarStyle: const CalendarStyle(
+                  calendarStyle: CalendarStyle(
                     selectedDecoration: BoxDecoration(
                       color: AppColors.primaryBlue,
                       shape: BoxShape.circle,
                     ),
-                    todayDecoration: BoxDecoration(
+                    todayDecoration: const BoxDecoration(
                       color: Color(0x4D0D47A1),
                       shape: BoxShape.circle,
                     ),
                     weekendTextStyle: TextStyle(color: AppColors.textGrey),
+                    defaultTextStyle: TextStyle(color: textColor),
                   ),
                   eventLoader: _getEventsForDay,
                   onDaySelected: (selectedDay, focusedDay) {
@@ -180,10 +192,14 @@ class CalendarScreenState extends State<CalendarScreen> {
                         horizontal: 24,
                         vertical: 6,
                       ),
-                      // Tu występował błąd - teraz MoodCard jest poprawnie zaimportowany
-                      child: MoodCard(
-                        entry: entry,
-                        onTap: () => widget.onOpenChat(entry),
+                      child: Bounceable(
+                        scaleFactor: 0.95,
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          widget.onOpenChat(entry);
+                        },
+                        // Używamy MoodCard bez onTap, bo Bounceable go obsługuje
+                        child: MoodCard(entry: entry),
                       ),
                     );
                   }, childCount: selectedEvents.length),
