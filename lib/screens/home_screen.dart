@@ -388,14 +388,9 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                               final entry = displayEntries[index];
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 16.0),
-                                child: Bounceable(
-                                  scaleFactor: 0.95,
-                                  onTap: () {
-                                    HapticFeedback.lightImpact();
-                                    widget.onOpenChat(entry);
-                                  },
-                                  // POPRAWKA
-                                  child: MoodCard(entry: entry),
+                                child: MoodCard(
+                                  entry: entry,
+                                  onTap: () => widget.onOpenChat(entry),
                                 ),
                               );
                             },

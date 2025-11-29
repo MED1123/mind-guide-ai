@@ -10,8 +10,14 @@ import '../widgets/animated_button.dart';
 class ChatScreen extends StatefulWidget {
   final MoodEntry entry;
   final VoidCallback onBack;
+  final VoidCallback? onGoToCalendar;
 
-  const ChatScreen({super.key, required this.entry, required this.onBack});
+  const ChatScreen({
+    super.key,
+    required this.entry,
+    required this.onBack,
+    this.onGoToCalendar,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -139,7 +145,102 @@ class _ChatScreenState extends State<ChatScreen> {
     _currentEntry = updatedEntry;
   }
 
-  void _clearConversation() async {
+  void _showClearOrDeleteDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Zarządzanie rozmową",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+
+            // 1. Wyczyść rozmowę (Outlined)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: isDark ? Colors.orangeAccent : Colors.orange,
+                  side: BorderSide(
+                    color: isDark ? Colors.orangeAccent : Colors.orange,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _clearConversationOnly();
+                },
+                child: const Text(
+                  "Wyczyść rozmowę",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // 2. Usuń cały wpis (Elevated - Red)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  // Wyraźniejsze tło w trybie jasnym (shade100) i ciemnym (withOpacity 0.2)
+                  backgroundColor: isDark
+                      ? Colors.red.withOpacity(0.2)
+                      : Colors.red.shade100,
+                  foregroundColor: isDark
+                      ? Colors.redAccent
+                      : Colors.red.shade900,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _deleteEntireEntry();
+                },
+                child: const Text(
+                  "Usuń cały wpis",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // 3. Anuluj (Niebieski tekst)
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  "Anuluj",
+                  style: TextStyle(
+                    color: AppColors.primaryBlue, // Zmieniono na niebieski
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _clearConversationOnly() async {
     final updatedEntry = MoodEntry(
       id: _currentEntry.id,
       date: _currentEntry.date,
@@ -152,15 +253,27 @@ class _ChatScreenState extends State<ChatScreen> {
 
     await DatabaseService.instance.updateEntry(updatedEntry);
 
-    setState(() {
-      _currentEntry = updatedEntry;
-      _loadMessagesFromEntry();
-    });
+    if (mounted) {
+      Navigator.pop(context); // Zamknij drawer
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Historia rozmowy wyczyszczona")),
+      );
+      widget.onGoToCalendar?.call();
+    }
+  }
 
-    if (mounted) Navigator.pop(context);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Rozmowa wyczyszczona")));
+  void _deleteEntireEntry() async {
+    if (_currentEntry.id != null) {
+      await DatabaseService.instance.deleteEntry(_currentEntry.id!);
+
+      if (mounted) {
+        Navigator.pop(context); // Zamknij drawer
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Wpis został usunięty")));
+        widget.onGoToCalendar?.call();
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -336,39 +449,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
                           ListTile(
                             leading: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.red,
+                              Icons.edit_note,
+                              color: AppColors.primaryBlue,
                             ),
                             title: const Text(
-                              "Wyczyść rozmowę",
-                              style: TextStyle(color: Colors.red),
+                              "Zarządzaj rozmową",
+                              style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                             onTap: () {
-                              showDialog(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text("Wyczyścić rozmowę?"),
-                                  content: const Text(
-                                    "Twoje notatki pozostaną, ale historia czatu z AI zostanie usunięta.",
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(ctx),
-                                      child: const Text("Anuluj"),
-                                    ),
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.pop(ctx);
-                                        _clearConversation();
-                                      },
-                                      child: const Text(
-                                        "Wyczyść",
-                                        style: TextStyle(color: Colors.red),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
+                              _showClearOrDeleteDialog();
                             },
                           ),
                         ],
@@ -376,7 +465,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
 
-                  // PRZYWRÓCONA SEKCJA: Ostatnie Zdjęcia
                   const Divider(),
                   Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -439,7 +527,6 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
-                  // POPRAWKA: Zmniejszono padding dolny z 20 na 4
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 4,
@@ -509,7 +596,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
 
               Container(
-                // POPRAWKA: Zmniejszono górny padding z 10 na 0
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 30),
                 decoration: BoxDecoration(
                   color: Theme.of(context).scaffoldBackgroundColor,

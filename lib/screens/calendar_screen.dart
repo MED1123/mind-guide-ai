@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // <-- KLUCZOWY IMPORT (DODANY)
+import 'package:flutter/services.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
@@ -66,7 +66,6 @@ class CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final selectedEvents = _getEventsForDay(_selectedDay ?? _focusedDay);
-    // Obsługa trybu ciemnego
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final calendarCardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
@@ -94,6 +93,8 @@ class CalendarScreenState extends State<CalendarScreen> {
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: TableCalendar(
+                  // KLUCZOWA ZMIANA: Ustawienie języka polskiego
+                  locale: 'pl_PL',
                   firstDay: DateTime.utc(2024, 1, 1),
                   lastDay: DateTime.utc(2030, 12, 31),
                   focusedDay: _focusedDay,
@@ -161,7 +162,7 @@ class CalendarScreenState extends State<CalendarScreen> {
               padding: const EdgeInsets.fromLTRB(24, 30, 24, 10),
               child: Text(
                 _selectedDay != null
-                    ? "Wpisy z ${DateFormat('d MMMM').format(_selectedDay!)}"
+                    ? "Wpisy z ${DateFormat('d MMMM', 'pl_PL').format(_selectedDay!)}" // Explicit locale
                     : "Wybierz dzień",
                 style: const TextStyle(
                   fontSize: 18,
@@ -192,14 +193,9 @@ class CalendarScreenState extends State<CalendarScreen> {
                         horizontal: 24,
                         vertical: 6,
                       ),
-                      child: Bounceable(
-                        scaleFactor: 0.95,
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          widget.onOpenChat(entry);
-                        },
-                        // Używamy MoodCard bez onTap, bo Bounceable go obsługuje
-                        child: MoodCard(entry: entry),
+                      child: MoodCard(
+                        entry: entry,
+                        onTap: () => widget.onOpenChat(entry),
                       ),
                     );
                   }, childCount: selectedEvents.length),
