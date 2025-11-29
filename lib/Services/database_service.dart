@@ -10,7 +10,7 @@ class DatabaseService {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('mood_journal_v2.db');
+    _database = await _initDB('mood_journal_v3.db');
     return _database!;
   }
 
@@ -29,13 +29,16 @@ class DatabaseService {
       moodRating REAL NOT NULL,
       category TEXT NOT NULL,
       aiAnalysis TEXT NOT NULL,
-      conversation TEXT NOT NULL 
+      conversation TEXT NOT NULL,
+      imagePaths TEXT NOT NULL -- Nowa kolumna na ścieżki zdjęć
     )
     ''');
   }
 
   Future<int> createEntry(MoodEntry entry) async {
     final db = await instance.database;
+    final imagesString = entry.imagePaths.join('|');
+
     return await db.insert('mood_entries', {
       'date': entry.date.toIso8601String(),
       'text': entry.text,
@@ -43,6 +46,7 @@ class DatabaseService {
       'category': entry.category,
       'aiAnalysis': entry.aiAnalysis,
       'conversation': entry.conversation,
+      'imagePaths': imagesString,
     });
   }
 
@@ -50,36 +54,41 @@ class DatabaseService {
     final db = await instance.database;
     final result = await db.query('mood_entries', orderBy: 'date DESC');
 
-    return result
-        .map(
-          (json) => MoodEntry(
-            id: json['id'] as int?,
-            date: DateTime.parse(json['date'] as String),
-            text: json['text'] as String,
-            moodRating: json['moodRating'] as double,
-            category: json['category'] as String,
-            aiAnalysis: json['aiAnalysis'] as String,
-            conversation: json['conversation'] as String? ?? "",
-          ),
-        )
-        .toList();
+    return result.map((json) {
+      // Konwersja stringa z bazy z powrotem na listę
+      String imagesStr = json['imagePaths'] as String? ?? "";
+      List<String> images = imagesStr.isEmpty ? [] : imagesStr.split('|');
+
+      return MoodEntry(
+        id: json['id'] as int?,
+        date: DateTime.parse(json['date'] as String),
+        text: json['text'] as String,
+        moodRating: json['moodRating'] as double,
+        category: json['category'] as String,
+        aiAnalysis: json['aiAnalysis'] as String,
+        conversation: json['conversation'] as String? ?? "",
+        imagePaths: images,
+      );
+    }).toList();
   }
 
   Future<int> updateEntry(MoodEntry entry) async {
     final db = await instance.database;
+    final imagesString = entry.imagePaths.join('|');
+
     return await db.update(
       'mood_entries',
       {
         'text': entry.text,
         'conversation': entry.conversation,
         'aiAnalysis': entry.aiAnalysis,
+        'imagePaths': imagesString,
       },
       where: 'id = ?',
       whereArgs: [entry.id],
     );
   }
 
-  // --- NOWA METODA ---
   Future<int> deleteEntry(int id) async {
     final db = await instance.database;
     return await db.delete('mood_entries', where: 'id = ?', whereArgs: [id]);

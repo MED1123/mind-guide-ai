@@ -1,10 +1,14 @@
+import 'dart:io'; // Do obsługi plików zdjęć
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
+import 'package:image_picker/image_picker.dart'; // Obsługa galerii
+
 import '../Services/database_service.dart';
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
+import '../widgets/animated_button.dart';
 
 class HomeScreenUI extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
@@ -29,6 +33,11 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   String? _selectedCategory;
   bool _wantAI = false;
 
+  final ImagePicker _picker = ImagePicker();
+
+  // Lista ścieżek do załączonych zdjęć (lokalna, przed zapisem)
+  List<String> _attachedImages = [];
+
   final List<String> _categories = [
     "Jestem spokojny 😌",
     "Jestem radosny 😃",
@@ -49,6 +58,31 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   void refreshEntries() {
     setState(() {
       _entriesFuture = DatabaseService.instance.readAllEntries();
+    });
+  }
+
+  // --- OBSŁUGA GALERII NA EKRANIE GŁÓWNYM ---
+  void _pickImageForEntry() async {
+    HapticFeedback.lightImpact();
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        setState(() {
+          _attachedImages.add(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Brak dostępu do galerii.")),
+        );
+      }
+    }
+  }
+
+  void _removeAttachedImage(int index) {
+    setState(() {
+      _attachedImages.removeAt(index);
     });
   }
 
@@ -81,7 +115,10 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
   void _handleSend() async {
     HapticFeedback.mediumImpact();
-    if (_textController.text.isEmpty || _selectedCategory == null) return;
+    // Pozwalamy zapisać jeśli jest tekst LUB zdjęcie
+    if ((_textController.text.isEmpty && _attachedImages.isEmpty) ||
+        _selectedCategory == null)
+      return;
 
     String conversationInit = _wantAI ? "User: ${_textController.text}|" : "";
 
@@ -92,6 +129,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       category: _selectedCategory!,
       aiAnalysis: "",
       conversation: conversationInit,
+      imagePaths: List.from(_attachedImages), // Przekazujemy listę zdjęć
     );
 
     int id = await DatabaseService.instance.createEntry(newEntry);
@@ -104,6 +142,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       category: newEntry.category,
       aiAnalysis: newEntry.aiAnalysis,
       conversation: newEntry.conversation,
+      imagePaths: newEntry.imagePaths,
     );
 
     refreshEntries();
@@ -114,6 +153,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     setState(() {
       _selectedCategory = null;
       _wantAI = false;
+      _attachedImages.clear();
     });
     FocusScope.of(context).unfocus();
 
@@ -128,9 +168,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
   @override
   Widget build(BuildContext context) {
-    // POPRAWKA: Sprawdzamy tryb ciemny
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Kolory dla trybu ciemnego (zgodnie z życzeniem: ciemne tło, niebieska ramka)
     final unselectedBgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final unselectedBorderColor = isDark
         ? AppColors.primaryBlue
@@ -161,7 +199,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                     runSpacing: 12,
                     children: _categories.map((category) {
                       final isSelected = _selectedCategory == category;
-
                       return Bounceable(
                         onTap: () => _onCategorySelected(category),
                         child: AnimatedContainer(
@@ -173,12 +210,12 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? AppColors.primaryBlue
-                                : unselectedBgColor, // Zmieniony kolor
+                                : unselectedBgColor,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: isSelected
                                   ? AppColors.primaryBlue
-                                  : unselectedBorderColor, // Zmieniony kolor ramki
+                                  : unselectedBorderColor,
                             ),
                             boxShadow: isSelected
                                 ? [
@@ -216,8 +253,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                               const SizedBox(height: 32),
                               Container(
                                 decoration: BoxDecoration(
-                                  color:
-                                      unselectedBgColor, // Ciemne tło w dark mode
+                                  color: unselectedBgColor,
                                   borderRadius: BorderRadius.circular(24),
                                   boxShadow: [
                                     BoxShadow(
@@ -251,6 +287,76 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                         ),
                                       ),
                                     ),
+
+                                    // --- PODGLĄD ZDJĘĆ (HOME) ---
+                                    if (_attachedImages.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 0,
+                                        ),
+                                        child: SizedBox(
+                                          height: 70,
+                                          child: ListView.builder(
+                                            scrollDirection: Axis.horizontal,
+                                            itemCount: _attachedImages.length,
+                                            itemBuilder: (context, index) {
+                                              return Stack(
+                                                alignment: Alignment.topRight,
+                                                children: [
+                                                  Container(
+                                                    margin:
+                                                        const EdgeInsets.only(
+                                                          right: 8,
+                                                          bottom: 8,
+                                                        ),
+                                                    width: 60,
+                                                    height: 60,
+                                                    decoration: BoxDecoration(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            12,
+                                                          ),
+                                                      image: DecorationImage(
+                                                        image: FileImage(
+                                                          File(
+                                                            _attachedImages[index],
+                                                          ),
+                                                        ),
+                                                        fit: BoxFit.cover,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  GestureDetector(
+                                                    onTap: () =>
+                                                        _removeAttachedImage(
+                                                          index,
+                                                        ),
+                                                    child: Container(
+                                                      decoration:
+                                                          const BoxDecoration(
+                                                            color: Colors.red,
+                                                            shape:
+                                                                BoxShape.circle,
+                                                          ),
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            2,
+                                                          ),
+                                                      child: const Icon(
+                                                        Icons.close,
+                                                        size: 12,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+
                                     Padding(
                                       padding: const EdgeInsets.only(
                                         left: 16,
@@ -258,23 +364,16 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                       ),
                                       child: Align(
                                         alignment: Alignment.centerLeft,
-                                        child: IconButton(
-                                          icon: const Icon(
-                                            Icons.image_outlined,
-                                            color: AppColors.textGrey,
+                                        child: Bounceable(
+                                          onTap: _pickImageForEntry,
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: const Icon(
+                                              Icons.image_outlined,
+                                              color: AppColors.textGrey,
+                                              size: 28,
+                                            ),
                                           ),
-                                          onPressed: () {
-                                            HapticFeedback.lightImpact();
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  "Dodawanie zdjęć - wkrótce!",
-                                                ),
-                                              ),
-                                            );
-                                          },
                                         ),
                                       ),
                                     ),
@@ -302,7 +401,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                     children: [
                                       Expanded(
                                         child: _buildChoiceBtn(
-                                          context, // Przekazujemy context
+                                          context,
                                           "Nie",
                                           !_wantAI,
                                           () => setState(() => _wantAI = false),
@@ -390,7 +489,9 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                 padding: const EdgeInsets.only(bottom: 16.0),
                                 child: MoodCard(
                                   entry: entry,
-                                  onTap: () => widget.onOpenChat(entry),
+                                  onTap: () {
+                                    widget.onOpenChat(entry);
+                                  },
                                 ),
                               );
                             },
@@ -416,7 +517,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     );
   }
 
-  // Ulepszona metoda, obsługuje tryb ciemny
   Widget _buildChoiceBtn(
     BuildContext context,
     String label,
@@ -429,7 +529,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
         : (isDark ? const Color(0xFF1E1E1E) : Colors.white);
     final borderColor = isActive
         ? AppColors.primaryBlue
-        : (isDark ? AppColors.primaryBlue : Colors.grey.shade300);
+        : (isDark ? AppColors.primaryBlue : Colors.grey.shade200);
     final textColor = isActive
         ? Colors.white
         : (isDark ? Colors.white : AppColors.textGrey);

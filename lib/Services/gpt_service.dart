@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
@@ -6,24 +7,23 @@ class GptService {
   static Future<String> chatWithAI(
     String userInput,
     String history,
-    bool isFemale,
-  ) async {
-    // 1. ZABEZPIECZENIE: Ładowanie .env jeśli brakuje
+    bool isFemale, {
+    List<String>? imagePaths,
+  }) async {
     if (!dotenv.isInitialized) {
       try {
         await dotenv.load(fileName: ".env");
       } catch (e) {
-        return "BŁĄD: Nie znaleziono pliku .env. Upewnij się, że plik istnieje w głównym folderze.";
+        return "BŁĄD: Nie znaleziono pliku .env.";
       }
     }
 
     final apiKey = dotenv.env['OPENROUTER_API_KEY'];
     if (apiKey == null || apiKey.isEmpty) {
-      return "BŁĄD: Klucz API jest pusty. Sprawdź plik .env.";
+      return "BŁĄD: Brak klucza API.";
     }
 
     final url = Uri.parse("https://openrouter.ai/api/v1/chat/completions");
-
     final headers = {
       'Authorization': 'Bearer $apiKey',
       'Content-Type': 'application/json',
@@ -31,67 +31,82 @@ class GptService {
       'X-Title': 'Mood Journal',
     };
 
-    // 2. PROMPT I PERSONA
     String systemPrompt = isFemale
-        ? "Jesteś empatyczną asystentką psychologiczną. Twoje odpowiedzi są ciepłe, zrozumiałe i wspierające."
-        : "Jesteś konkretnym, ale empatycznym asystentem psychologicznym. Twoje odpowiedzi są rzeczowe i wspierające.";
+        ? "Jesteś empatyczną asystentką psychologiczną. Twoje odpowiedzi są ciepłe, zrozumiałe i wspierające. Jeśli użytkownik prześle zdjęcie, postaraj się je zinterpretować w kontekście emocjonalnym."
+        : "Jesteś konkretnym, ale empatycznym asystentem psychologicznym. Twoje odpowiedzi są rzeczowe i wspierające. Jeśli użytkownik prześle zdjęcie, postaraj się je zinterpretować w kontekście emocjonalnym.";
 
-    // Utwórz listę wiadomości, włączając prompt systemowy
-    List<Map<String, String>> messages = [
+    List<Map<String, dynamic>> messages = [
       {"role": "system", "content": systemPrompt},
     ];
 
-    // Dodaj historię rozmowy
-    final historyParts = history.split('|');
-    for (var part in historyParts) {
-      if (part.startsWith("User: ")) {
-        messages.add({"role": "user", "content": part.substring(6)});
-      } else if (part.startsWith("AI: ")) {
-        messages.add({"role": "assistant", "content": part.substring(4)});
+    if (history.isNotEmpty) {
+      final historyParts = history.split('|');
+      for (var part in historyParts) {
+        if (part.startsWith("User: ")) {
+          String content = part.substring(6);
+          if (!content.startsWith("[IMG:")) {
+            messages.add({"role": "user", "content": content});
+          }
+        } else if (part.startsWith("AI: ")) {
+          messages.add({"role": "assistant", "content": part.substring(4)});
+        }
       }
     }
 
-    // Dodaj najnowszą wiadomość użytkownika (userInput) jako ostatnią wiadomość
-    messages.add({"role": "user", "content": userInput});
+    if (imagePaths != null && imagePaths.isNotEmpty) {
+      List<Map<String, dynamic>> contentList = [];
+      if (userInput.isNotEmpty) {
+        contentList.add({"type": "text", "text": userInput});
+      } else {
+        contentList.add({"type": "text", "text": "Przesyłam zdjęcie."});
+      }
 
-    // ZAPOBIEGANIE BŁĘDOWI - jeśli to pierwsza wiadomość, usuwamy duplikat.
-    // Zdarza się to, gdy history ma postać "User: ..." i to jest ten sam tekst co userInput
+      for (String path in imagePaths) {
+        try {
+          final bytes = await File(path).readAsBytes();
+          final base64Image = base64Encode(bytes);
+          contentList.add({
+            "type": "image_url",
+            "image_url": {"url": "data:image/jpeg;base64,$base64Image"},
+          });
+        } catch (e) {
+          // Błąd ładowania zdjęcia
+        }
+      }
+      messages.add({"role": "user", "content": contentList});
+    } else {
+      messages.add({"role": "user", "content": userInput});
+    }
+
     if (messages.length >= 3 &&
-        messages[messages.length - 1]['content'] ==
-            messages[messages.length - 2]['content']) {
+        messages.last['content'].toString() ==
+            messages[messages.length - 2]['content'].toString()) {
       messages.removeAt(messages.length - 1);
     }
 
     final body = jsonEncode({
-      "model": "x-ai/grok-4.1-fast", // Wybrany model
+      "model": "x-ai/grok-4.1-fast",
       "messages": messages,
-      // Dodajemy parametr reasoning, którego wymaga ten model (zgodnie z Twoim przykładem)
       "reasoning": {"enabled": true},
     });
 
-    // 4. WYSŁANIE
     try {
-      final response = await http.post(url, headers: headers, body: body);
+      final response = await http
+          .post(url, headers: headers, body: body)
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        // Próbujemy wyciągnąć treść odpowiedzi
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
         if (data['choices'] != null && data['choices'].isNotEmpty) {
-          // Opcjonalnie: Możesz tu też sprawdzić data['choices'][0]['message']['reasoning_details'] jeśli chcesz widzieć proces myślenia
           return data['choices'][0]['message']['content'].trim();
         } else {
           return "AI nie zwróciło odpowiedzi (pusta treść).";
         }
       } else {
-        // Obsługa błędu 402 (Brak płatności) lub 404 (Model niedostępny)
-        if (response.statusCode == 402) {
-          return "BŁĄD 402: Wygląda na to, że ten model jednak wymaga płatnych kredytów na OpenRouter.";
-        }
-        return "Błąd serwera (Kod: ${response.statusCode}). Treść: ${response.body}";
+        return "Błąd serwera (Kod: ${response.statusCode}).";
       }
     } catch (e) {
-      return "Błąd połączenia z internetem: $e";
+      return "Błąd połączenia lub limit czasu.";
     }
   }
 }
