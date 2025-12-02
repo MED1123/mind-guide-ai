@@ -2,12 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
 
 import '../Services/database_service.dart';
 import '../Services/gpt_service.dart';
+import '../Services/tts_service.dart';
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/animated_button.dart';
@@ -32,16 +31,17 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  // Stan czatu
   List<Map<String, String>> _messages = [];
   bool _isTyping = false;
   late MoodEntry _currentEntry;
 
+  // Stan mediów i TTS
   final ImagePicker _picker = ImagePicker();
-  late stt.SpeechToText _speech;
-  bool _isListening = false;
-  bool _speechAvailable = false;
+  final TtsService _ttsService = TtsService();
+
   bool _showSendButton = false;
-  bool _speechInitialized = false;
+  bool _isSoundEnabled = false;
 
   List<String> _tempChatImages = [];
 
@@ -50,6 +50,8 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _currentEntry = widget.entry;
     _loadMessagesFromEntry();
+
+    _ttsService.init();
 
     _inputController.addListener(() {
       final hasText = _inputController.text.trim().isNotEmpty;
@@ -74,64 +76,60 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _inputController.dispose();
     _scrollController.dispose();
+    _ttsService.stop();
     super.dispose();
   }
 
-  Future<void> _ensureSpeechInitialized() async {
-    if (_speechInitialized) return;
+  // --- METODY POMOCNICZE ---
 
-    _speech = stt.SpeechToText();
-    try {
-      _speechAvailable = await _speech.initialize(
-        onStatus: (status) {
-          if (status == 'notListening') {
-            if (mounted) setState(() => _isListening = false);
-          }
-        },
-        onError: (error) {
-          if (mounted) setState(() => _isListening = false);
-        },
-      );
-      _speechInitialized = true;
-    } catch (e) {
-      // Ignoruj błąd inicjalizacji
-    }
+  void _showFullImage(String path) {
+    HapticFeedback.selectionClick();
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(10),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.file(File(path), fit: BoxFit.contain),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 20),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  void _toggleListening() async {
-    var status = await Permission.microphone.status;
-    if (!status.isGranted) {
-      await Permission.microphone.request();
-    }
+  void _toggleSound() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _isSoundEnabled = !_isSoundEnabled;
+    });
 
-    await _ensureSpeechInitialized();
-
-    if (!_speechAvailable) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Rozpoznawanie mowy niedostępne.")),
-        );
-      }
-      return;
-    }
-
-    HapticFeedback.mediumImpact();
-
-    if (_isListening) {
-      _speech.stop();
-      setState(() => _isListening = false);
+    if (!_isSoundEnabled) {
+      _ttsService.stop();
     } else {
-      setState(() => _isListening = true);
-      _speech.listen(
-        onResult: (result) {
-          setState(() {
-            _inputController.text = result.recognizedWords;
-            _inputController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _inputController.text.length),
-            );
-          });
-        },
-        localeId: "pl_PL",
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Włączono czytanie głosowe"),
+          duration: Duration(seconds: 2),
+        ),
       );
     }
   }
@@ -163,6 +161,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  // --- LOGIKA CZATU ---
   void _loadMessagesFromEntry() {
     _messages.clear();
     if (_currentEntry.conversation.isNotEmpty) {
@@ -187,7 +186,13 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_currentEntry.conversation.isEmpty &&
         _currentEntry.imagePaths.isNotEmpty) {
       for (var img in _currentEntry.imagePaths) {
-        _messages.insert(0, {"role": "user_image", "path": img});
+        // Unikamy duplikatów
+        bool exists = _messages.any(
+          (m) => m['role'] == 'user_image' && m['path'] == img,
+        );
+        if (!exists) {
+          _messages.insert(0, {"role": "user_image", "path": img});
+        }
       }
     }
   }
@@ -200,8 +205,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
     String userInputText = "";
     var lastUserMsg = _messages.last;
-
     if (lastUserMsg['role'] == 'user') {
+      lastUserMsg['text'] ??= "";
       userInputText = lastUserMsg['text']!;
     } else if (lastUserMsg['role'] == 'user_image') {
       userInputText = "Przesyłam zdjęcie.";
@@ -233,6 +238,11 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _messages.add({"role": "ai", "text": aiResponse});
       });
+
+      if (_isSoundEnabled) {
+        _ttsService.speak(aiResponse);
+      }
+
       _saveConversation();
     } catch (e) {
       if (mounted) {
@@ -248,6 +258,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendMessage() async {
     if (_inputController.text.trim().isEmpty && _tempChatImages.isEmpty) return;
+
+    _ttsService.stop();
     HapticFeedback.lightImpact();
 
     final userText = _inputController.text;
@@ -261,6 +273,13 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages.add({"role": "user", "text": userText});
       }
       _isTyping = true;
+
+      // POPRAWKA: Używamy List.from, aby stworzyć nową, edytowalną listę
+      // zamiast próbować modyfikować potencjalnie stałą (unmodifiable) listę.
+      List<String> newImagePaths = List.from(_currentEntry.imagePaths);
+      newImagePaths.addAll(imagesToSend);
+      _currentEntry.imagePaths = newImagePaths;
+
       _tempChatImages.clear();
       _inputController.clear();
       _showSendButton = false;
@@ -285,13 +304,18 @@ class _ChatScreenState extends State<ChatScreen> {
         prompt,
         history,
         appSettings.isAiFemale,
-        imagePaths: imagesToSend,
+        imagePaths: _currentEntry.imagePaths,
       );
 
       if (!mounted) return;
       setState(() {
         _messages.add({"role": "ai", "text": aiResponse});
       });
+
+      if (_isSoundEnabled) {
+        _ttsService.speak(aiResponse);
+      }
+
       _saveConversation();
     } catch (e) {
       if (mounted) {
@@ -437,9 +461,14 @@ class _ChatScreenState extends State<ChatScreen> {
       conversation: "",
       imagePaths: _currentEntry.imagePaths,
     );
+
     await DatabaseService.instance.updateEntry(updatedEntry);
+
     if (mounted) {
       Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Historia rozmowy wyczyszczona")),
+      );
       widget.onGoToCalendar?.call();
     }
   }
@@ -449,6 +478,9 @@ class _ChatScreenState extends State<ChatScreen> {
       await DatabaseService.instance.deleteEntry(_currentEntry.id!);
       if (mounted) {
         Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Wpis został usunięty")));
         widget.onGoToCalendar?.call();
       }
     }
@@ -549,7 +581,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(20.0),
                     child: Text(
                       "Ustawienia",
                       style: TextStyle(
@@ -648,41 +680,75 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        Container(
-                          height: 100,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.black26
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
+
+                        // Sekcja wyświetlania zdjęć
+                        if (_currentEntry.imagePaths.isEmpty)
+                          Container(
+                            height: 100,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
                               color: isDark
-                                  ? Colors.white10
-                                  : Colors.grey.shade300,
+                                  ? Colors.black26
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white10
+                                    : Colors.grey.shade300,
+                              ),
                             ),
-                          ),
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.photo_library_outlined,
-                                  color: Colors.grey.shade400,
-                                  size: 30,
-                                ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  "Brak ostatnich zdjęć",
-                                  style: TextStyle(
-                                    color: Colors.grey.shade500,
-                                    fontSize: 12,
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.photo_library_outlined,
+                                    color: Colors.grey.shade400,
+                                    size: 30,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    "Brak ostatnich zdjęć",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else
+                          SizedBox(
+                            height: 100,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _currentEntry.imagePaths.length,
+                              separatorBuilder: (ctx, i) =>
+                                  const SizedBox(width: 8),
+                              itemBuilder: (context, index) {
+                                final path = _currentEntry.imagePaths[index];
+                                return Bounceable(
+                                  onTap: () => _showFullImage(path),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.file(
+                                      File(path),
+                                      width: 100,
+                                      height: 100,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (c, o, s) => Container(
+                                        width: 100,
+                                        height: 100,
+                                        color: Colors.grey,
+                                        child: const Icon(Icons.broken_image),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -690,6 +756,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ),
+
           body: Column(
             children: [
               Expanded(
@@ -703,52 +770,86 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemBuilder: (context, index) {
                     final msg = _messages[index];
                     final isUser = msg['role']!.startsWith('user');
+
                     return Align(
                       alignment: isUser
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: msg['role'] == 'user_image'
-                            ? const EdgeInsets.all(4)
-                            : const EdgeInsets.all(16),
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.75,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isUser
-                              ? AppColors.chatBubbleUser
-                              : (isDark
-                                    ? AppColors.chatBubbleAIDark
-                                    : AppColors.chatBubbleAI),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 5,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: msg['role'] == 'user_image'
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: Image.file(
-                                  File(msg['path']!),
-                                  width: 200,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : Text(
-                                msg['text']!,
-                                style: TextStyle(
-                                  fontSize: appSettings.fontSize,
-                                  color: (isUser || isDark && !isUser)
-                                      ? Colors.white
-                                      : AppColors.textDark,
-                                  height: 1.4,
-                                ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              if (!isUser && msg['text'] != null) {
+                                HapticFeedback.selectionClick();
+                                _ttsService.speak(msg['text']!);
+                              } else if (msg['role'] == 'user_image') {
+                                _showFullImage(msg['path']!);
+                              }
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: msg['role'] == 'user_image'
+                                  ? const EdgeInsets.all(4)
+                                  : const EdgeInsets.all(16),
+                              constraints: BoxConstraints(
+                                maxWidth:
+                                    MediaQuery.of(context).size.width * 0.75,
                               ),
+                              decoration: BoxDecoration(
+                                color: isUser
+                                    ? AppColors.chatBubbleUser
+                                    : (isDark
+                                          ? AppColors.chatBubbleAIDark
+                                          : AppColors.chatBubbleAI),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 5,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (msg['role'] == 'user_image')
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Image.file(
+                                        File(msg['path']!),
+                                        width: 200,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      msg['text']!,
+                                      style: TextStyle(
+                                        fontSize: appSettings.fontSize,
+                                        color: (isUser || isDark && !isUser)
+                                            ? Colors.white
+                                            : AppColors.textDark,
+                                        height: 1.4,
+                                      ),
+                                    ),
+
+                                  if (!isUser && msg['text'] != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Icon(
+                                        Icons.volume_up,
+                                        size: 16,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -827,6 +928,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                         ),
+
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
@@ -849,30 +951,33 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+
                           Bounceable(
-                            onTap: _toggleListening,
+                            onTap: _toggleSound,
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               margin: const EdgeInsets.only(bottom: 2),
                               decoration: BoxDecoration(
-                                color: _isListening
-                                    ? Colors.red.withOpacity(0.1)
-                                    : inputBgColor,
+                                color: _isSoundEnabled
+                                    ? AppColors.primaryBlue
+                                    : (isDark
+                                          ? const Color(0xFF2C2C2C)
+                                          : Colors.grey.shade200),
                                 shape: BoxShape.circle,
-                                border: _isListening
-                                    ? Border.all(color: Colors.red, width: 1.5)
-                                    : null,
                               ),
                               child: Icon(
-                                _isListening ? Icons.stop : Icons.mic_none,
-                                color: _isListening
-                                    ? Colors.red
+                                _isSoundEnabled
+                                    ? Icons.volume_up
+                                    : Icons.volume_off,
+                                color: _isSoundEnabled
+                                    ? Colors.white
                                     : AppColors.primaryBlue,
                                 size: 20,
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
+
                           Expanded(
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -911,7 +1016,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                     vertical: 10,
                                   ),
                                 ),
-                                onChanged: (v) => setState(() {}),
                               ),
                             ),
                           ),
@@ -954,6 +1058,13 @@ class _ChatScreenState extends State<ChatScreen> {
   ) {
     final isSelected = (appSettings.fontSize - sizeValue).abs() < 0.01;
     final isDark = appSettings.isDarkMode;
+    final bgColor = isSelected
+        ? AppColors.primaryBlue
+        : (isDark ? Colors.grey.shade800 : Colors.grey.shade200);
+    final textColor = isSelected
+        ? Colors.white
+        : (isDark ? Colors.white70 : Colors.black87);
+
     return Expanded(
       child: AnimatedPressButton(
         onTap: onTap,
@@ -961,9 +1072,7 @@ class _ChatScreenState extends State<ChatScreen> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.primaryBlue
-                : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+            color: bgColor,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected ? AppColors.primaryBlue : Colors.transparent,
@@ -973,9 +1082,7 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Text(
               label,
               style: TextStyle(
-                color: isSelected
-                    ? Colors.white
-                    : (isDark ? Colors.white70 : Colors.black87),
+                color: textColor,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),

@@ -93,7 +93,7 @@ class GptService {
     try {
       final response = await http
           .post(url, headers: headers, body: body)
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 90));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -106,7 +106,7 @@ class GptService {
         return "Błąd serwera (Kod: ${response.statusCode}).";
       }
     } catch (e) {
-      return "Błąd połączenia lub limit czasu.";
+      return "Błąd połączenia lub limit czasu (spróbuj ponownie).";
     }
   }
 }
