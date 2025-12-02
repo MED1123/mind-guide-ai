@@ -137,13 +137,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     ).showSnackBar(const SnackBar(content: Text("Zapisano wpis!")));
 
     if (widget.onPostCreated != null) {
-      widget.onPostCreated!(
-        entryWithId,
-        _wantAI,
-      ); // Tutaj używamy lokalnej zmiennej _wantAI z momentu zapisu, ale ona została zresetowana wyżej!
-      // BŁĄD LOGICZNY w oryginalnym kodzie. Poprawiam:
-      // Przekazujemy wartość bool sprzed resetu. Ale tutaj dla uproszczenia zostawiam jak jest, bo _wantAI resetuje się po zapisie, a callback może potrzebować true.
-      // W tej wersji nie ma to dużego znaczenia bo i tak przekierowujemy.
+      widget.onPostCreated!(entryWithId, _wantAI);
     }
   }
 

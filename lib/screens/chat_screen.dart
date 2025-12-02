@@ -12,7 +12,7 @@ import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/animated_button.dart';
 
-// --- WIADOMOŚĆ PRZESUWANA ---
+// --- WIADOMOŚĆ PRZESUWANA (SWIPE) ---
 class SlidableMessage extends StatefulWidget {
   final Widget child;
   final DateTime? time;
@@ -28,6 +28,9 @@ class _SlidableMessageState extends State<SlidableMessage>
   double _dragOffset = 0.0;
   late AnimationController _controller;
   late Animation<double> _animation;
+
+  // Maksymalne przesunięcie
+  final double _maxDrag = -80.0;
 
   @override
   void initState() {
@@ -69,7 +72,9 @@ class _SlidableMessageState extends State<SlidableMessage>
         if (details.delta.dx < 0 || _dragOffset < 0) {
           setState(() {
             _dragOffset += details.delta.dx;
-            if (_dragOffset < -60) _dragOffset = -60;
+            if (_dragOffset < _maxDrag) {
+              _dragOffset = _maxDrag + (details.delta.dx * 0.1);
+            }
             if (_dragOffset > 0) _dragOffset = 0;
           });
         }
@@ -80,22 +85,26 @@ class _SlidableMessageState extends State<SlidableMessage>
       child: Stack(
         alignment: Alignment.centerRight,
         children: [
-          if (_dragOffset < -10)
-            Padding(
-              padding: const EdgeInsets.only(right: 20.0),
-              child: Opacity(
-                opacity: (-_dragOffset / 60).clamp(0.0, 1.0),
-                child: Text(
-                  timeStr,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+          if (_dragOffset < -5)
+            Positioned(
+              top: 0,
+              bottom: 0,
+              right: 0,
+              width: _dragOffset.abs(),
+              child: Center(
+                child: Opacity(
+                  opacity: (-_dragOffset / 60).clamp(0.0, 1.0),
+                  child: Text(
+                    timeStr,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
             ),
-
           Transform.translate(
             offset: Offset(_dragOffset, 0),
             child: widget.child,
@@ -214,7 +223,6 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _isSoundEnabled = !_isSoundEnabled;
     });
-
     if (!_isSoundEnabled) {
       _ttsService.stop();
     } else {
@@ -389,7 +397,11 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages.add({"role": "user", "text": userText, "time": now});
       }
       _isTyping = true;
-      _currentEntry.imagePaths.addAll(imagesToSend);
+
+      List<String> newImagePaths = List.from(_currentEntry.imagePaths);
+      newImagePaths.addAll(imagesToSend);
+      _currentEntry.imagePaths = newImagePaths;
+
       _tempChatImages.clear();
       _inputController.clear();
       _showSendButton = false;
@@ -397,7 +409,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     String prompt = userText.isEmpty ? "Przesłałem zdjęcie." : userText;
-
     int newItems = (userText.isNotEmpty ? 1 : 0) + imagesToSend.length;
     String history = "";
 
@@ -425,11 +436,9 @@ class _ChatScreenState extends State<ChatScreen> {
           "time": DateTime.now(),
         });
       });
-
       if (_isSoundEnabled) {
         _ttsService.speak(aiResponse);
       }
-
       _saveConversation();
     } catch (e) {
       if (mounted)
@@ -614,15 +623,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final inputBgColor = isDark
-        ? const Color(0xFF2C2C2C)
-        : Colors.grey.shade200;
-    final inputIconColor = isDark ? Colors.grey : Colors.grey.shade600;
-
     return AnimatedBuilder(
       animation: appSettings,
       builder: (context, child) {
+        // DEFINICJA KOLORÓW WEWNĄTRZ BUILDERA (NAPRAWA BŁĘDU)
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final inputBgColor = isDark
+            ? const Color(0xFF2C2C2C)
+            : Colors.grey.shade200;
+        final inputIconColor = isDark ? Colors.grey : Colors.grey.shade600;
+
         return Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
@@ -711,12 +721,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Column(
                         children: [
                           SwitchListTile(
-                            title: const Text("Przełącz na asystentkę"),
+                            title: const Text("Żeński głos AI"),
                             value: appSettings.isAiFemale,
                             activeColor: AppColors.primaryBlue,
-                            onChanged: (v) {
-                              appSettings.toggleGender(v);
-                            },
+                            onChanged: (v) => appSettings.toggleGender(v),
                           ),
                           SwitchListTile(
                             title: const Text("Tryb Ciemny"),
@@ -876,7 +884,6 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
-                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 4,
@@ -890,70 +897,74 @@ class _ChatScreenState extends State<ChatScreen> {
                       alignment: isUser
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
-                      child: SlidableMessage(
-                        time: msg['time'] as DateTime?,
-                        child: GestureDetector(
-                          onTap: () {
-                            if (!isUser && msg['text'] != null) {
-                              HapticFeedback.selectionClick();
-                              _ttsService.speak(msg['text']!);
-                            } else if (msg['role'] == 'user_image') {
-                              _showFullImage(msg['path']!);
-                            }
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: msg['role'] == 'user_image'
-                                ? const EdgeInsets.all(4)
-                                : const EdgeInsets.all(12),
-                            constraints: BoxConstraints(
-                              maxWidth:
-                                  MediaQuery.of(context).size.width * 0.75,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isUser
-                                  ? AppColors.chatBubbleUser
-                                  : (isDark
-                                        ? AppColors.chatBubbleAIDark
-                                        : AppColors.chatBubbleAI),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 2,
-                                  offset: const Offset(0, 1),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          SlidableMessage(
+                            time: msg['time'] as DateTime?,
+                            child: GestureDetector(
+                              onTap: () {
+                                if (!isUser && msg['text'] != null) {
+                                  HapticFeedback.selectionClick();
+                                  _ttsService.speak(msg['text']!);
+                                } else if (msg['role'] == 'user_image') {
+                                  _showFullImage(msg['path']!);
+                                }
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: msg['role'] == 'user_image'
+                                    ? const EdgeInsets.all(4)
+                                    : const EdgeInsets.all(16),
+                                constraints: BoxConstraints(
+                                  maxWidth:
+                                      MediaQuery.of(context).size.width * 0.75,
                                 ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: isUser
-                                  ? CrossAxisAlignment.end
-                                  : CrossAxisAlignment.start,
-                              children: [
-                                if (msg['role'] == 'user_image')
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(16),
-                                    child: Image.file(
-                                      File(msg['path']!),
-                                      width: 200,
-                                      fit: BoxFit.cover,
+                                decoration: BoxDecoration(
+                                  color: isUser
+                                      ? AppColors.chatBubbleUser
+                                      : (isDark
+                                            ? AppColors.chatBubbleAIDark
+                                            : AppColors.chatBubbleAI),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 5,
+                                      offset: const Offset(0, 2),
                                     ),
-                                  )
-                                else
-                                  Text(
-                                    msg['text']!,
-                                    style: TextStyle(
-                                      fontSize: appSettings.fontSize,
-                                      color: (isUser || isDark && !isUser)
-                                          ? Colors.white
-                                          : AppColors.textDark,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                              ],
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (msg['role'] == 'user_image')
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: Image.file(
+                                          File(msg['path']!),
+                                          width: 200,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    else
+                                      Text(
+                                        msg['text']!,
+                                        style: TextStyle(
+                                          fontSize: appSettings.fontSize,
+                                          color: (isUser || isDark && !isUser)
+                                              ? Colors.white
+                                              : AppColors.textDark,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     );
                   },
@@ -974,7 +985,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
 
-              // --- INPUT BAR (NAPRAWIONY) ---
               Container(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
                 decoration: BoxDecoration(
@@ -1033,6 +1043,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                         ),
+
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
@@ -1055,6 +1066,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+
                           Bounceable(
                             onTap: _toggleSound,
                             child: Container(
@@ -1081,9 +1093,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           const SizedBox(width: 8),
 
-                          // POPRAWKA: Pole tekstowe
                           Expanded(
                             child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 0,
+                              ),
                               decoration: BoxDecoration(
                                 color: inputBgColor,
                                 borderRadius: BorderRadius.circular(20),
@@ -1103,7 +1118,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                 maxLines: 5,
                                 textCapitalization:
                                     TextCapitalization.sentences,
-                                // POPRAWKA: isDense: true i contentPadding naprawiają skok
                                 decoration: InputDecoration(
                                   hintText: "Napisz wiadomość...",
                                   hintStyle: TextStyle(
@@ -1112,16 +1126,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                   ),
                                   border: InputBorder.none,
                                   isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                    horizontal: 12,
-                                  ),
+                                  contentPadding: const EdgeInsets.all(12),
                                 ),
-                                onChanged: (v) => setState(() {}),
                               ),
                             ),
                           ),
-
                           if (_showSendButton) ...[
                             const SizedBox(width: 8),
                             Bounceable(
@@ -1167,6 +1176,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final textColor = isSelected
         ? Colors.white
         : (isDark ? Colors.white70 : Colors.black87);
+
     return Expanded(
       child: AnimatedPressButton(
         onTap: onTap,
