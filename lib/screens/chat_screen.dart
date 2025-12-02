@@ -12,7 +12,7 @@ import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/animated_button.dart';
 
-// --- WIADOMOŚĆ PRZESUWANA (SWIPE) ---
+// --- WIADOMOŚĆ PRZESUWANA ---
 class SlidableMessage extends StatefulWidget {
   final Widget child;
   final DateTime? time;
@@ -105,6 +105,7 @@ class _SlidableMessageState extends State<SlidableMessage>
                 ),
               ),
             ),
+
           Transform.translate(
             offset: Offset(_dragOffset, 0),
             child: widget.child,
@@ -398,6 +399,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       _isTyping = true;
 
+      // Kopia listy do edycji
       List<String> newImagePaths = List.from(_currentEntry.imagePaths);
       newImagePaths.addAll(imagesToSend);
       _currentEntry.imagePaths = newImagePaths;
@@ -436,9 +438,11 @@ class _ChatScreenState extends State<ChatScreen> {
           "time": DateTime.now(),
         });
       });
+
       if (_isSoundEnabled) {
         _ttsService.speak(aiResponse);
       }
+
       _saveConversation();
     } catch (e) {
       if (mounted)
@@ -623,16 +627,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inputBgColor = isDark
+        ? const Color(0xFF2C2C2C)
+        : Colors.grey.shade200;
+    final inputIconColor = isDark ? Colors.grey : Colors.grey.shade600;
+
     return AnimatedBuilder(
       animation: appSettings,
       builder: (context, child) {
-        // DEFINICJA KOLORÓW WEWNĄTRZ BUILDERA (NAPRAWA BŁĘDU)
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final inputBgColor = isDark
-            ? const Color(0xFF2C2C2C)
-            : Colors.grey.shade200;
-        final inputIconColor = isDark ? Colors.grey : Colors.grey.shade600;
-
         return Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
@@ -721,7 +724,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Column(
                         children: [
                           SwitchListTile(
-                            title: const Text("Żeński głos AI"),
+                            title: const Text("Przełącz na asystentkę"),
                             value: appSettings.isAiFemale,
                             activeColor: AppColors.primaryBlue,
                             onChanged: (v) => appSettings.toggleGender(v),
@@ -905,10 +908,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             time: msg['time'] as DateTime?,
                             child: GestureDetector(
                               onTap: () {
-                                if (!isUser && msg['text'] != null) {
-                                  HapticFeedback.selectionClick();
-                                  _ttsService.speak(msg['text']!);
-                                } else if (msg['role'] == 'user_image') {
+                                // ZMIANA: Usunięto wywołanie TTS przy kliknięciu w dymek
+                                if (msg['role'] == 'user_image') {
                                   _showFullImage(msg['path']!);
                                 }
                               },
