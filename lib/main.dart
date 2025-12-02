@@ -13,10 +13,7 @@ import 'screens/chat_screen.dart';
 import 'widgets/edit_entry_screen.dart';
 import 'widgets/mood_card.dart';
 
-// ... AppColors, AppSettings, main(), MoodJournalApp, LoginScreen (BEZ ZMIAN) ...
-
-// Wklejam od AppColors do MainAppScaffold, bo tam są zmiany:
-
+// --- 1. KONFIGURACJA KOLORÓW ---
 class AppColors {
   static const Color primaryBlue = Color(0xFF0D47A1);
   static const Color backgroundWhite = Color(0xFFF5F6F8);
@@ -32,6 +29,7 @@ class AppColors {
   static const Color angerRed = Color(0xFFD32F2F);
 }
 
+// --- 2. GLOBALNE USTAWIENIA ---
 class AppSettings extends ChangeNotifier {
   double fontSize = 14.0;
   bool isAiFemale = false;
@@ -65,6 +63,7 @@ class AppSettings extends ChangeNotifier {
 
 final AppSettings appSettings = AppSettings();
 
+// --- 3. START APLIKACJI ---
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -96,6 +95,7 @@ class MoodJournalApp extends StatelessWidget {
                 ? ThemeMode.dark
                 : ThemeMode.light,
 
+            // MOTYW JASNY
             theme: ThemeData(
               useMaterial3: true,
               brightness: Brightness.light,
@@ -124,6 +124,7 @@ class MoodJournalApp extends StatelessWidget {
               ),
             ),
 
+            // MOTYW CIEMNY
             darkTheme: ThemeData(
               useMaterial3: true,
               brightness: Brightness.dark,
@@ -163,6 +164,7 @@ class MoodJournalApp extends StatelessWidget {
   }
 }
 
+// --- 4. EKRAN LOGOWANIA ---
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -278,7 +280,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   void _goToCalendar() {
     setState(() {
       _currentIndex = 1;
-      // ZMIANA: Czyścimy aktywny czat przy przejściu
+      // Czyścimy aktywny czat przy przejściu
       _activeChatEntry = null;
       Future.delayed(const Duration(milliseconds: 100), () {
         _calendarKey.currentState?.loadEvents();
@@ -491,6 +493,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   }
 
   void _handleChatTabTap() {
+    // Wykrywanie trybu ciemnego
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
@@ -615,12 +618,15 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                   final entry = entries[index];
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: MoodCard(
-                      entry: entry,
+                    child: Bounceable(
+                      scaleFactor: 0.95,
                       onTap: () {
+                        HapticFeedback.lightImpact();
                         Navigator.pop(context);
                         _openChatWithEntry(entry);
                       },
+                      // POPRAWKA: Usunięto onTap: null z wywołania MoodCard
+                      child: MoodCard(entry: entry),
                     ),
                   );
                 },
@@ -677,7 +683,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
         return ChatScreen(
           entry: _activeChatEntry!,
           onBack: _backToHome,
-          // ZMIANA: Przekazujemy callback do ChatScreen
           onGoToCalendar: _goToCalendar,
         );
       case 3:

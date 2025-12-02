@@ -8,7 +8,6 @@ import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
 
-// --- 8. EKRAN KALENDARZA ---
 class CalendarScreen extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
 
@@ -93,7 +92,6 @@ class CalendarScreenState extends State<CalendarScreen> {
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: TableCalendar(
-                  // KLUCZOWA ZMIANA: Ustawienie języka polskiego
                   locale: 'pl_PL',
                   firstDay: DateTime.utc(2024, 1, 1),
                   lastDay: DateTime.utc(2030, 12, 31),
@@ -162,7 +160,7 @@ class CalendarScreenState extends State<CalendarScreen> {
               padding: const EdgeInsets.fromLTRB(24, 30, 24, 10),
               child: Text(
                 _selectedDay != null
-                    ? "Wpisy z ${DateFormat('d MMMM', 'pl_PL').format(_selectedDay!)}" // Explicit locale
+                    ? "Wpisy z ${DateFormat('d MMMM', 'pl_PL').format(_selectedDay!)}"
                     : "Wybierz dzień",
                 style: const TextStyle(
                   fontSize: 18,
@@ -193,9 +191,14 @@ class CalendarScreenState extends State<CalendarScreen> {
                         horizontal: 24,
                         vertical: 6,
                       ),
-                      child: MoodCard(
-                        entry: entry,
-                        onTap: () => widget.onOpenChat(entry),
+                      child: Bounceable(
+                        scaleFactor: 0.95,
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          widget.onOpenChat(entry);
+                        },
+                        // POPRAWKA: Usunięto onTap: null
+                        child: MoodCard(entry: entry),
                       ),
                     );
                   }, childCount: selectedEvents.length),

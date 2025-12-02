@@ -31,14 +31,16 @@ class GptService {
       'X-Title': 'Mood Journal',
     };
 
+    // ZMIANA: Bardziej wyraziste prompty systemowe
     String systemPrompt = isFemale
-        ? "Jesteś empatyczną asystentką psychologiczną. Twoje odpowiedzi są ciepłe, zrozumiałe i wspierające. Jeśli użytkownik prześle zdjęcie, postaraj się je zinterpretować w kontekście emocjonalnym."
-        : "Jesteś konkretnym, ale empatycznym asystentem psychologicznym. Twoje odpowiedzi są rzeczowe i wspierające. Jeśli użytkownik prześle zdjęcie, postaraj się je zinterpretować w kontekście emocjonalnym.";
+        ? "Jesteś ciepłą, empatyczną i troskliwą asystentką psychologiczną. Twoje odpowiedzi są bardzo kobiece, pełne zrozumienia i wsparcia emocjonalnego. Używaj form żeńskich (np. 'zrozumiałam', 'chciałabym'). Jeśli to początek rozmowy, przedstaw się krótko i ciepło. Jeśli użytkownik prześle zdjęcie, zinterpretuj je emocjonalnie."
+        : "Jesteś konkretnym, rzeczowym i profesjonalnym asystentem psychologicznym. Twoje odpowiedzi są logiczne, wspierające i skupione na rozwiązaniach. Używaj form męskich. Jeśli użytkownik prześle zdjęcie, zinterpretuj je w kontekście emocjonalnym.";
 
     List<Map<String, dynamic>> messages = [
       {"role": "system", "content": systemPrompt},
     ];
 
+    // Parsowanie historii
     if (history.isNotEmpty) {
       final historyParts = history.split('|');
       for (var part in historyParts) {
@@ -53,6 +55,7 @@ class GptService {
       }
     }
 
+    // Budowanie wiadomości
     if (imagePaths != null && imagePaths.isNotEmpty) {
       List<Map<String, dynamic>> contentList = [];
       if (userInput.isNotEmpty) {
@@ -106,7 +109,7 @@ class GptService {
         return "Błąd serwera (Kod: ${response.statusCode}).";
       }
     } catch (e) {
-      return "Błąd połączenia lub limit czasu (spróbuj ponownie).";
+      return "Błąd połączenia lub limit czasu.";
     }
   }
 }

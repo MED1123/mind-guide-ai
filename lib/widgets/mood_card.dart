@@ -6,9 +6,10 @@ import '../main.dart';
 
 class MoodCard extends StatefulWidget {
   final MoodEntry entry;
-  final VoidCallback? onTap;
+  // USUNIĘTO onTap: Karta jest teraz tylko elementem wizualnym.
+  // Interakcję obsługuje Bounceable na zewnątrz.
 
-  const MoodCard({super.key, required this.entry, this.onTap});
+  const MoodCard({super.key, required this.entry});
 
   @override
   State<MoodCard> createState() => _MoodCardState();
@@ -19,13 +20,11 @@ class _MoodCardState extends State<MoodCard>
   // Zmienne do obsługi obrotu 3D
   double _rotationX = 0;
   double _rotationY = 0;
-  double _scale = 1.0;
 
   // Kontroler do płynnego powrotu karty do pozycji zero po puszczeniu
   late AnimationController _controller;
   late Animation<double> _animRotationX;
   late Animation<double> _animRotationY;
-  late Animation<double> _animScale;
 
   @override
   void initState() {
@@ -43,7 +42,6 @@ class _MoodCardState extends State<MoodCard>
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
-    // Pobieramy rozmiar karty
     final size = context.size;
     if (size == null) return;
 
@@ -55,22 +53,20 @@ class _MoodCardState extends State<MoodCard>
     final touchY = event.localPosition.dy - centerY;
 
     setState(() {
-      // Obliczamy kąty obrotu (czułość)
-      _rotationY = (touchX / centerX) * 0.15;
-      _rotationX = -(touchY / centerY) * 0.15;
-      // Utrzymujemy lekkie zmniejszenie podczas ruchu
-      _scale = 0.95;
+      // Czułość efektu 3D
+      _rotationY =
+          (touchX / centerX) *
+          0.10; // Zmniejszono czułość dla subtelniejszego efektu
+      _rotationX = -(touchY / centerY) * 0.10;
     });
   }
 
   void _resetCard() {
-    // Definiujemy krzywą animacji powrotu
     final curvedAnimation = CurvedAnimation(
       parent: _controller,
       curve: Curves.easeOut,
     );
 
-    // Animacja powrotu do stanu płaskiego (0 rotacji, skala 1.0)
     _animRotationX = Tween<double>(
       begin: _rotationX,
       end: 0.0,
@@ -78,10 +74,6 @@ class _MoodCardState extends State<MoodCard>
     _animRotationY = Tween<double>(
       begin: _rotationY,
       end: 0.0,
-    ).animate(curvedAnimation);
-    _animScale = Tween<double>(
-      begin: _scale,
-      end: 1.0,
     ).animate(curvedAnimation);
 
     _controller.reset();
@@ -91,7 +83,6 @@ class _MoodCardState extends State<MoodCard>
       setState(() {
         _rotationX = _animRotationX.value;
         _rotationY = _animRotationY.value;
-        _scale = _animScale.value;
       });
     });
   }
@@ -129,100 +120,83 @@ class _MoodCardState extends State<MoodCard>
     final color = _getCategoryColor(widget.entry.category);
     final icon = _getCategoryIcon(widget.entry.category);
 
-    // Używamy Listenera na najwyższym poziomie, aby łapać surowe zdarzenia
-    // To naprawia problem z przewijaniem listy
+    // Listener obsługuje efekt 3D (pochylanie)
     return Listener(
-      onPointerDown: (_) {
-        HapticFeedback.selectionClick();
-        setState(() => _scale = 0.95);
-      },
       onPointerMove: _handlePointerMove,
-      // Gdy użytkownik puści palec
       onPointerUp: (_) => _resetCard(),
-      // KLUCZOWE: Gdy ScrollView przejmie gest (anulowanie dotyku)
-      onPointerCancel: (_) => _resetCard(),
+      onPointerCancel: (_) =>
+          _resetCard(), // Naprawa zacinania przy scrollowaniu
 
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          if (widget.onTap != null) widget.onTap!();
-        },
-        child: Transform(
-          transform: Matrix4.identity()
-            ..setEntry(3, 2, 0.001) // Perspektywa 3D
-            ..rotateX(_rotationX)
-            ..rotateY(_rotationY)
-            ..scale(_scale),
-          alignment: Alignment.center,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.4),
-                  // Dynamiczny cień - większy gdy karta jest "płaska", mniejszy gdy wciśnięta
-                  blurRadius: _scale < 1.0 ? 5 : 15,
-                  offset: Offset(0, _scale < 1.0 ? 2 : 8),
-                ),
-              ],
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [color, color.withOpacity(0.8)],
+      child: Transform(
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, 0.001) // Perspektywa
+          ..rotateX(_rotationX)
+          ..rotateY(_rotationY),
+        alignment: Alignment.center,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.4),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
               ),
+            ],
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [color, color.withOpacity(0.8)],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black12,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(icon, color: Colors.white, size: 20),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black12,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    Text(
-                      DateFormat('dd MMM, HH:mm').format(widget.entry.date),
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+                    child: Icon(icon, color: Colors.white, size: 20),
+                  ),
+                  Text(
+                    DateFormat(
+                      'dd MMM, HH:mm',
+                      'pl_PL',
+                    ).format(widget.entry.date),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.entry.category,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.entry.category,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.entry.text,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.entry.text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
