@@ -32,6 +32,9 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   final TextEditingController _textController = TextEditingController();
   String? _selectedCategory;
   bool _wantAI = false;
+  // Nowa zmienna lokalna do wyboru płci przy tworzeniu wpisu
+  bool _tempIsAiFemale = false;
+
   final ImagePicker _picker = ImagePicker();
   List<String> _attachedImages = [];
 
@@ -43,12 +46,15 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     "Jestem zmęczony 😴",
     "Jestem zły 😡",
   ];
+
   late Future<List<MoodEntry>> _entriesFuture;
 
   @override
   void initState() {
     super.initState();
     refreshEntries();
+    // Domyślnie ustawiamy lokalną płeć na taką, jak w ustawieniach globalnych
+    _tempIsAiFemale = appSettings.isAiFemale;
   }
 
   void refreshEntries() {
@@ -81,13 +87,23 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     });
   }
 
+  // POPRAWKA 1: Logika zwijania (Toggle)
   void _onCategorySelected(String category) {
     HapticFeedback.selectionClick();
     setState(() {
-      _selectedCategory = category;
-      _wantAI =
-          !category.toLowerCase().contains('radosny') &&
-          !category.toLowerCase().contains('spokojny');
+      if (_selectedCategory == category) {
+        // Jeśli kliknięto w to samo -> zwiń (odznacz)
+        _selectedCategory = null;
+        _wantAI = false;
+      } else {
+        // Jeśli kliknięto w nowe -> zaznacz i ustaw domyślną chęć na AI
+        _selectedCategory = category;
+        _wantAI =
+            !category.toLowerCase().contains('radosny') &&
+            !category.toLowerCase().contains('spokojny');
+        // Resetujemy wybór płci do domyślnego z ustawień
+        _tempIsAiFemale = appSettings.isAiFemale;
+      }
     });
   }
 
@@ -98,6 +114,11 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       return;
 
     String conversationInit = _wantAI ? "User: ${_textController.text}|" : "";
+
+    // Jeśli użytkownik wybrał AI i zmienił płeć w tym ekranie, aktualizujemy ustawienia globalne
+    if (_wantAI) {
+      appSettings.toggleGender(_tempIsAiFemale);
+    }
 
     final newEntry = MoodEntry(
       date: DateTime.now(),
@@ -110,7 +131,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     );
 
     int id = await DatabaseService.instance.createEntry(newEntry);
-    // Tworzymy obiekt tylko do przekazania callbackiem (refresh załatwi widok)
+
     final entryWithId = MoodEntry(
       id: id,
       date: newEntry.date,
@@ -123,6 +144,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     );
 
     refreshEntries();
+
+    bool userWantedAI = _wantAI;
 
     _textController.clear();
     setState(() {
@@ -137,7 +160,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     ).showSnackBar(const SnackBar(content: Text("Zapisano wpis!")));
 
     if (widget.onPostCreated != null) {
-      widget.onPostCreated!(entryWithId, _wantAI);
+      widget.onPostCreated!(entryWithId, userWantedAI);
     }
   }
 
@@ -230,6 +253,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                         : Column(
                             children: [
                               const SizedBox(height: 32),
+
+                              // POLE TEKSTOWE I ZDJĘCIA
                               Container(
                                 decoration: BoxDecoration(
                                   color: unselectedBgColor,
@@ -357,6 +382,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                 ),
                               ),
                               const SizedBox(height: 20),
+
+                              // SEKCJA WYBORU ASYSTENTA
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -392,8 +419,48 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                       ),
                                     ],
                                   ),
+
+                                  // POPRAWKA 2: Wybór płci (widoczne tylko gdy wybrano TAK)
+                                  if (_wantAI) ...[
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      "Wybierz osobowość:",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                        color: AppColors.textGrey,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildChoiceBtn(
+                                            context,
+                                            "Głos Męski",
+                                            !_tempIsAiFemale,
+                                            () => setState(
+                                              () => _tempIsAiFemale = false,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: _buildChoiceBtn(
+                                            context,
+                                            "Głos Żeński",
+                                            _tempIsAiFemale,
+                                            () => setState(
+                                              () => _tempIsAiFemale = true,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ),
+
                               const SizedBox(height: 24),
                               Bounceable(
                                 onTap: _handleSend,
@@ -440,9 +507,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 16),
-
                   FutureBuilder<List<MoodEntry>>(
                     future: _entriesFuture,
                     builder: (context, snapshot) {
@@ -466,7 +531,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                           final entry = displayEntries[index];
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 16.0),
-                            // MoodCard bez onTap, bo Bounceable to obsługuje
                             child: Bounceable(
                               scaleFactor: 0.95,
                               onTap: () {
@@ -481,7 +545,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                     },
                   ),
 
-                  // SZTYWNY PRZYCISK
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 8.0),
