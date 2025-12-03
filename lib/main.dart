@@ -108,16 +108,13 @@ class MoodJournalApp extends StatelessWidget {
                 surfaceTintColor: Colors.transparent,
                 iconTheme: IconThemeData(color: AppColors.textDark),
               ),
-              textTheme: TextTheme(
+              textTheme: const TextTheme(
                 bodyMedium: TextStyle(
-                  fontSize: appSettings.fontSize,
+                  fontSize: 14.0,
                   color: AppColors.textDark,
                 ),
-                bodyLarge: TextStyle(
-                  fontSize: appSettings.fontSize + 2,
-                  color: AppColors.textDark,
-                ),
-                headlineMedium: const TextStyle(
+                bodyLarge: TextStyle(fontSize: 16.0, color: AppColors.textDark),
+                headlineMedium: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppColors.textDark,
                 ),
@@ -138,16 +135,16 @@ class MoodJournalApp extends StatelessWidget {
                 surfaceTintColor: Colors.transparent,
                 iconTheme: IconThemeData(color: AppColors.textLight),
               ),
-              textTheme: TextTheme(
+              textTheme: const TextTheme(
                 bodyMedium: TextStyle(
-                  fontSize: appSettings.fontSize,
+                  fontSize: 14.0,
                   color: AppColors.textLight,
                 ),
                 bodyLarge: TextStyle(
-                  fontSize: appSettings.fontSize + 2,
+                  fontSize: 16.0,
                   color: AppColors.textLight,
                 ),
-                headlineMedium: const TextStyle(
+                headlineMedium: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppColors.textLight,
                 ),
@@ -173,12 +170,10 @@ class LoginScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.primaryBlue,
       body: SafeArea(
-        // POPRAWKA: CustomScrollView + SliverFillRemaining zapobiega Overflow
         child: CustomScrollView(
           slivers: [
             SliverFillRemaining(
-              hasScrollBody:
-                  false, // To pozwala używać Spacer() wewnątrz Column
+              hasScrollBody: false,
               child: Padding(
                 padding: const EdgeInsets.all(32.0),
                 child: Column(
@@ -517,16 +512,20 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               "Rozmowa z Asystentem",
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: textColor,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
             Bounceable(
               scaleFactor: 0.9,
               onTap: () {
@@ -534,26 +533,39 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                 Navigator.pop(context);
                 setState(() => _currentIndex = 0);
               },
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryBlue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryBlue.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.edit_note,
+                      color: AppColors.primaryBlue,
+                      size: 32,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.edit_note,
-                    color: AppColors.primaryBlue,
+                  const SizedBox(height: 8),
+                  Text(
+                    "Nowy wpis",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
-                ),
-                title: Text("Nowy wpis", style: TextStyle(color: textColor)),
-                subtitle: Text(
-                  "Opisz jak się teraz czujesz",
-                  style: TextStyle(color: subTextColor),
-                ),
+                  Text(
+                    "Opisz jak się teraz czujesz",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: subTextColor, fontSize: 12),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 24),
             Bounceable(
               scaleFactor: 0.9,
               onTap: () {
@@ -561,23 +573,36 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                 Navigator.pop(context);
                 _showEntryPicker(context);
               },
-              child: ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.history,
+                      color: Colors.orange,
+                      size: 32,
+                    ),
                   ),
-                  child: const Icon(Icons.history, color: Colors.orange),
-                ),
-                title: Text(
-                  "Wpis z historii",
-                  style: TextStyle(color: textColor),
-                ),
-                subtitle: Text(
-                  "Porozmawiaj o przeszłości",
-                  style: TextStyle(color: subTextColor),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Wpis z historii",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    "Porozmawiaj o przeszłości",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: subTextColor, fontSize: 12),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
@@ -632,7 +657,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                         Navigator.pop(context);
                         _openChatWithEntry(entry);
                       },
-                      // ZMIANA: Usunięto parametr onTap, ponieważ MoodCard już go nie ma
                       child: MoodCard(entry: entry),
                     ),
                   );

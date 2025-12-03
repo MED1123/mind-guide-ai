@@ -808,7 +808,16 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Column(
                         children: [
                           SwitchListTile(
-                            title: const Text("Tryb Ciemny"),
+                            // ZMIANA: Skrócona nazwa, mniejsza czcionka, jedna linia
+                            title: const Text(
+                              "Tryb ciemny",
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             value: appSettings.isDarkMode,
                             activeColor: AppColors.primaryBlue,
                             secondary: Icon(
@@ -822,10 +831,13 @@ class _ChatScreenState extends State<ChatScreen> {
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                             child: Text(
                               "Wielkość czcionki",
+                              // ZMIANA: Mniejsza czcionka
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.textGrey,
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodyLarge?.color,
                               ),
                             ),
                           ),
@@ -861,9 +873,15 @@ class _ChatScreenState extends State<ChatScreen> {
                               Icons.edit_note,
                               color: AppColors.primaryBlue,
                             ),
+                            // ZMIANA: Zmiana tekstu na krótszy, mniejsza czcionka, jedna linia
                             title: const Text(
-                              "Zarządzaj rozmową",
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                              "Opcje rozmowy",
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             onTap: _showClearOrDeleteDialog,
                           ),
@@ -1035,6 +1053,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 else
                                   Text(
                                     msg['text']!,
+                                    // Ta część nadal reaguje na suwak
                                     style: TextStyle(
                                       fontSize: appSettings.fontSize,
                                       color: (isUser || isDark && !isUser)
