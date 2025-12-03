@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // HapticFeedback
+import 'package:image_picker/image_picker.dart'; // Galeria
 import 'package:flutter_bounceable/flutter_bounceable.dart';
+
 import '../Services/database_service.dart';
 import '../models/mood_entry.dart';
 import '../main.dart';
@@ -17,24 +21,97 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
   late TextEditingController _textController;
   bool _wantAI = false;
 
+  // Obsługa zdjęć
+  final ImagePicker _picker = ImagePicker();
+  List<String> _currentImages = [];
+
   @override
   void initState() {
     super.initState();
     _textController = TextEditingController(text: widget.entry.text);
     _wantAI = widget.entry.conversation.isNotEmpty;
+    // Kopiujemy listę zdjęć, aby móc ją edytować bez zmiany oryginału przed zapisem
+    _currentImages = List.from(widget.entry.imagePaths);
   }
 
+  // --- LOGIKA ZDJĘĆ ---
+  void _pickImage() async {
+    HapticFeedback.lightImpact();
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        setState(() {
+          _currentImages.add(image.path);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Błąd galerii")));
+      }
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _currentImages.removeAt(index);
+    });
+  }
+
+  void _showFullImage(String path) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(10),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.file(File(path), fit: BoxFit.contain),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 20),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- ZAPIS ---
   void _saveChanges() async {
-    if (_textController.text.isEmpty) return;
+    if (_textController.text.isEmpty && _currentImages.isEmpty) return;
 
     String conversationData = widget.entry.conversation;
 
+    // Jeśli użytkownik włączył AI, a wcześniej go nie było, inicjujemy rozmowę
     if (_wantAI) {
       if (conversationData.isEmpty) {
-        conversationData = "User: ${_textController.text}|";
+        // Budujemy startowy kontekst.
+        // Uwaga: ChatScreen sam sobie poradzi z wczytaniem zdjęć z imagePaths,
+        // więc tutaj wystarczy zainicjować tekst, jeśli jest.
+        if (_textController.text.isNotEmpty) {
+          conversationData = "User: ${_textController.text}|";
+        }
+        // Jeśli sam obrazek, ChatScreen to wykryje po pustym conversation i liście zdjęć.
       }
     } else {
-      conversationData = "";
+      // Jeśli wyłączył AI, czyścimy historię (opcjonalne, zależy od preferencji)
+      // conversationData = "";
     }
 
     final updatedEntry = MoodEntry(
@@ -45,6 +122,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
       category: widget.entry.category,
       aiAnalysis: widget.entry.aiAnalysis,
       conversation: conversationData,
+      imagePaths: _currentImages, // Zapisujemy zaktualizowaną listę zdjęć
     );
 
     await DatabaseService.instance.updateEntry(updatedEntry);
@@ -52,6 +130,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
     if (!mounted) return;
 
     if (_wantAI) {
+      // Przekazujemy zaktualizowany wpis do ChatScreen
       Navigator.pop(context, updatedEntry);
     } else {
       Navigator.pop(context, null);
@@ -60,14 +139,13 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Poprawa #3: Pobieramy czy jest tryb ciemny
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
     final containerColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = Theme.of(context).textTheme.bodyLarge?.color;
 
     return Scaffold(
-      backgroundColor: backgroundColor, // Używamy koloru z motywu
+      backgroundColor: backgroundColor,
       appBar: AppBar(
         title: const Text("Edycja wpisu"),
         backgroundColor: backgroundColor,
@@ -89,7 +167,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
             const SizedBox(height: 10),
             Container(
               decoration: BoxDecoration(
-                color: containerColor, // Ciemny kontener w trybie ciemnym
+                color: containerColor,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
@@ -98,20 +176,114 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
                   ),
                 ],
               ),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _textController,
-                    maxLines: 6,
-                    style: TextStyle(color: textColor), // Kolor tekstu
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(16),
-                    ),
-                  ),
-                ],
+              child: TextField(
+                controller: _textController,
+                maxLines: 6,
+                style: TextStyle(color: textColor),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(16),
+                  hintText: "Twój wpis...",
+                ),
               ),
             ),
+
+            const SizedBox(height: 30),
+
+            // --- SEKCJA ZDJĘĆ ---
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Załączone zdjęcia:",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+                // Przycisk dodawania zdjęcia
+                Bounceable(
+                  onTap: _pickImage,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryBlue.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.add_a_photo,
+                      color: AppColors.primaryBlue,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            if (_currentImages.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: Text(
+                    "Brak zdjęć",
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 100,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _currentImages.length,
+                  separatorBuilder: (ctx, i) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final path = _currentImages[index];
+                    return Stack(
+                      alignment: Alignment.topRight,
+                      children: [
+                        GestureDetector(
+                          onTap: () => _showFullImage(path),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              File(path),
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                              errorBuilder: (c, o, s) => Container(
+                                width: 100,
+                                height: 100,
+                                color: Colors.grey,
+                                child: const Icon(Icons.broken_image),
+                              ),
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => _removeImage(index),
+                          child: Container(
+                            margin: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: const Icon(
+                              Icons.close,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+
             const SizedBox(height: 30),
 
             Text(

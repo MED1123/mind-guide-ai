@@ -173,89 +173,98 @@ class LoginScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.primaryBlue,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.auto_awesome,
-                  size: 80,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 40),
-              const Text(
-                "Mood Journal",
-                style: TextStyle(
-                  fontSize: 42,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                "Twój osobisty asystent emocjonalny\nwspierany przez AI",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 16,
-                  height: 1.5,
-                ),
-              ),
-              const Spacer(),
-
-              Bounceable(
-                scaleFactor: 0.85,
-                onTap: () async {
-                  HapticFeedback.lightImpact();
-                  await Future.delayed(const Duration(milliseconds: 50));
-
-                  if (context.mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const MainAppScaffold(),
+        // POPRAWKA: CustomScrollView + SliverFillRemaining zapobiega Overflow
+        child: CustomScrollView(
+          slivers: [
+            SliverFillRemaining(
+              hasScrollBody:
+                  false, // To pozwala używać Spacer() wewnątrz Column
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
                       ),
-                    );
-                  }
-                },
-                child: Container(
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        size: 80,
+                        color: Colors.white,
                       ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: const Text(
-                    "Rozpocznij podróż",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryBlue,
                     ),
-                  ),
+                    const SizedBox(height: 40),
+                    const Text(
+                      "Mood Journal",
+                      style: TextStyle(
+                        fontSize: 42,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Twój osobisty asystent emocjonalny",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        height: 1.5,
+                      ),
+                    ),
+                    const Spacer(),
+
+                    Bounceable(
+                      scaleFactor: 0.85,
+                      onTap: () async {
+                        HapticFeedback.lightImpact();
+                        await Future.delayed(const Duration(milliseconds: 50));
+
+                        if (context.mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MainAppScaffold(),
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: const Text(
+                          "Rozpocznij podróż",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
-              const SizedBox(height: 20),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -280,7 +289,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   void _goToCalendar() {
     setState(() {
       _currentIndex = 1;
-      // Czyścimy aktywny czat przy przejściu
       _activeChatEntry = null;
       Future.delayed(const Duration(milliseconds: 100), () {
         _calendarKey.currentState?.loadEvents();
@@ -493,7 +501,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   }
 
   void _handleChatTabTap() {
-    // Wykrywanie trybu ciemnego
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
@@ -625,7 +632,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                         Navigator.pop(context);
                         _openChatWithEntry(entry);
                       },
-                      // POPRAWKA: Usunięto onTap: null z wywołania MoodCard
+                      // ZMIANA: Usunięto parametr onTap, ponieważ MoodCard już go nie ma
                       child: MoodCard(entry: entry),
                     ),
                   );

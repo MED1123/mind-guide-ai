@@ -1,1 +1,56 @@
-flutter/ephemeral
+# Pliki konfiguracyjne środowiska (KLUCZOWE)
+.env
+*.env
+
+# Flutter/Dart - pliki generowane automatycznie
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Android - pliki lokalne i generowane
+android/local.properties
+android/.gradle
+android/app/build
+android/key.properties
+android/*.jks
+android/*.keystore
+
+# iOS - pliki generowane
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Pods/
+ios/.symlinks/
+
+# macOS - pliki generowane
+macos/Flutter/ephemeral/
+macos/Pods/
+
+# Windows - pliki generowane
+windows/flutter/ephemeral/
+
+# Linux - pliki generowane
+linux/flutter/ephemeral/
+
+# Web - pliki generowane
+web/icons/Icon-192.png
+web/icons/Icon-512.png
+web/favicon.png
+
+# IDE i Edytory (ustawienia lokalne developera)
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Systemowe (Mac/Windows)
+.DS_Store
+Thumbs.db

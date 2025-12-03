@@ -12,7 +12,7 @@ import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/animated_button.dart';
 
-// --- WIADOMOŚĆ PRZESUWANA ---
+// --- WIADOMOŚĆ PRZESUWANA (SWIPE) ---
 class SlidableMessage extends StatefulWidget {
   final Widget child;
   final DateTime? time;
@@ -219,6 +219,36 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // POPRAWKA: Metoda do załączania zdjęcia z historii z walidacją
+  void _attachImageFromHistory(String path) {
+    // Sprawdzamy czy to zdjęcie jest już dodane do TEJ wiadomości
+    if (_tempChatImages.contains(path)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("To zdjęcie jest już załączone"),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+
+    setState(() {
+      _tempChatImages.add(path);
+      _showSendButton = true;
+    });
+
+    Navigator.pop(context);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Załączono zdjęcie do wiadomości"),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
   void _toggleSound() {
     HapticFeedback.selectionClick();
     setState(() {
@@ -399,10 +429,13 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       _isTyping = true;
 
-      // Kopia listy do edycji
-      List<String> newImagePaths = List.from(_currentEntry.imagePaths);
-      newImagePaths.addAll(imagesToSend);
-      _currentEntry.imagePaths = newImagePaths;
+      // POPRAWKA: Dodajemy tylko te zdjęcia, których jeszcze nie ma w bazie wpisu
+      // Aby uniknąć duplikatów w sekcji "Ostatnie zdjęcia"
+      for (var path in imagesToSend) {
+        if (!_currentEntry.imagePaths.contains(path)) {
+          _currentEntry.imagePaths.add(path);
+        }
+      }
 
       _tempChatImages.clear();
       _inputController.clear();
@@ -727,7 +760,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             title: const Text("Przełącz na asystentkę"),
                             value: appSettings.isAiFemale,
                             activeColor: AppColors.primaryBlue,
-                            onChanged: (v) => appSettings.toggleGender(v),
+                            onChanged: (v) {
+                              appSettings.toggleGender(v);
+                            },
                           ),
                           SwitchListTile(
                             title: const Text("Tryb Ciemny"),
@@ -853,23 +888,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                   const SizedBox(width: 8),
                               itemBuilder: (context, index) {
                                 final path = _currentEntry.imagePaths[index];
-                                return Bounceable(
+                                // Użycie nowego widgetu z animacją (LongPressAnimatedImage)
+                                return LongPressAnimatedImage(
+                                  path: path,
                                   onTap: () => _showFullImage(path),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.file(
-                                      File(path),
-                                      width: 100,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (c, o, s) => Container(
-                                        width: 100,
-                                        height: 100,
-                                        color: Colors.grey,
-                                        child: const Icon(Icons.broken_image),
-                                      ),
-                                    ),
-                                  ),
+                                  onLongPress: () =>
+                                      _attachImageFromHistory(path),
                                 );
                               },
                             ),
@@ -887,6 +911,7 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
+                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 4,
@@ -900,72 +925,67 @@ class _ChatScreenState extends State<ChatScreen> {
                       alignment: isUser
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          SlidableMessage(
-                            time: msg['time'] as DateTime?,
-                            child: GestureDetector(
-                              onTap: () {
-                                // ZMIANA: Usunięto wywołanie TTS przy kliknięciu w dymek
-                                if (msg['role'] == 'user_image') {
-                                  _showFullImage(msg['path']!);
-                                }
-                              },
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 16),
-                                padding: msg['role'] == 'user_image'
-                                    ? const EdgeInsets.all(4)
-                                    : const EdgeInsets.all(16),
-                                constraints: BoxConstraints(
-                                  maxWidth:
-                                      MediaQuery.of(context).size.width * 0.75,
+                      child: SlidableMessage(
+                        time: msg['time'] as DateTime?,
+                        child: GestureDetector(
+                          onTap: () {
+                            if (!isUser && msg['text'] != null) {
+                              HapticFeedback.selectionClick();
+                            } else if (msg['role'] == 'user_image') {
+                              _showFullImage(msg['path']!);
+                            }
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: msg['role'] == 'user_image'
+                                ? const EdgeInsets.all(4)
+                                : const EdgeInsets.all(12),
+                            constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.75,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isUser
+                                  ? AppColors.chatBubbleUser
+                                  : (isDark
+                                        ? AppColors.chatBubbleAIDark
+                                        : AppColors.chatBubbleAI),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 5,
+                                  offset: const Offset(0, 2),
                                 ),
-                                decoration: BoxDecoration(
-                                  color: isUser
-                                      ? AppColors.chatBubbleUser
-                                      : (isDark
-                                            ? AppColors.chatBubbleAIDark
-                                            : AppColors.chatBubbleAI),
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
-                                      blurRadius: 5,
-                                      offset: const Offset(0, 2),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (msg['role'] == 'user_image')
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Image.file(
+                                      File(msg['path']!),
+                                      width: 200,
+                                      fit: BoxFit.cover,
                                     ),
-                                  ],
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (msg['role'] == 'user_image')
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(16),
-                                        child: Image.file(
-                                          File(msg['path']!),
-                                          width: 200,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      )
-                                    else
-                                      Text(
-                                        msg['text']!,
-                                        style: TextStyle(
-                                          fontSize: appSettings.fontSize,
-                                          color: (isUser || isDark && !isUser)
-                                              ? Colors.white
-                                              : AppColors.textDark,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
+                                  )
+                                else
+                                  Text(
+                                    msg['text']!,
+                                    style: TextStyle(
+                                      fontSize: appSettings.fontSize,
+                                      color: (isUser || isDark && !isUser)
+                                          ? Colors.white
+                                          : AppColors.textDark,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     );
                   },
@@ -1067,7 +1087,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-
                           Bounceable(
                             onTap: _toggleSound,
                             child: Container(
@@ -1093,13 +1112,8 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-
                           Expanded(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 0,
-                              ),
                               decoration: BoxDecoration(
                                 color: inputBgColor,
                                 borderRadius: BorderRadius.circular(20),
@@ -1129,6 +1143,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   isDense: true,
                                   contentPadding: const EdgeInsets.all(12),
                                 ),
+                                onChanged: (v) => setState(() {}),
                               ),
                             ),
                           ),
@@ -1177,7 +1192,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final textColor = isSelected
         ? Colors.white
         : (isDark ? Colors.white70 : Colors.black87);
-
     return Expanded(
       child: AnimatedPressButton(
         onTap: onTap,
@@ -1199,6 +1213,80 @@ class _ChatScreenState extends State<ChatScreen> {
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- NOWY WIDGET Z ANIMACJĄ PRZYTRZYMANIA ---
+class LongPressAnimatedImage extends StatefulWidget {
+  final String path;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const LongPressAnimatedImage({
+    super.key,
+    required this.path,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  State<LongPressAnimatedImage> createState() => _LongPressAnimatedImageState();
+}
+
+class _LongPressAnimatedImageState extends State<LongPressAnimatedImage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.9,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      onLongPress: () {
+        widget.onLongPress();
+        _controller.reverse();
+      },
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) => _controller.reverse(),
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(
+            File(widget.path),
+            width: 100,
+            height: 100,
+            fit: BoxFit.cover,
+            errorBuilder: (c, o, s) => Container(
+              width: 100,
+              height: 100,
+              color: Colors.grey,
+              child: const Icon(Icons.broken_image),
             ),
           ),
         ),

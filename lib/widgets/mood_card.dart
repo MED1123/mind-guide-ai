@@ -6,8 +6,6 @@ import '../main.dart';
 
 class MoodCard extends StatefulWidget {
   final MoodEntry entry;
-  // USUNIĘTO onTap: Karta jest teraz tylko elementem wizualnym.
-  // Interakcję obsługuje Bounceable na zewnątrz.
 
   const MoodCard({super.key, required this.entry});
 
@@ -54,9 +52,7 @@ class _MoodCardState extends State<MoodCard>
 
     setState(() {
       // Czułość efektu 3D
-      _rotationY =
-          (touchX / centerX) *
-          0.10; // Zmniejszono czułość dla subtelniejszego efektu
+      _rotationY = (touchX / centerX) * 0.10;
       _rotationX = -(touchY / centerY) * 0.10;
     });
   }
@@ -102,16 +98,11 @@ class _MoodCardState extends State<MoodCard>
   }
 
   IconData _getCategoryIcon(String category) {
-    if (category.contains("Radość") || category.contains("radosny"))
-      return Icons.sentiment_very_satisfied;
-    if (category.contains("Stres") || category.contains("zestresowany"))
-      return Icons.bolt;
-    if (category.contains("Smutek") || category.contains("smutny"))
-      return Icons.cloud;
-    if (category.contains("Zmęczenie") || category.contains("zmęczony"))
-      return Icons.bedtime;
-    if (category.contains("Złość") || category.contains("zły"))
-      return Icons.whatshot;
+    if (category.contains("Radość")) return Icons.sentiment_very_satisfied;
+    if (category.contains("Stres")) return Icons.bolt;
+    if (category.contains("Smutek")) return Icons.cloud;
+    if (category.contains("Zmęczenie")) return Icons.bedtime;
+    if (category.contains("Złość")) return Icons.whatshot;
     return Icons.self_improvement;
   }
 
@@ -119,13 +110,12 @@ class _MoodCardState extends State<MoodCard>
   Widget build(BuildContext context) {
     final color = _getCategoryColor(widget.entry.category);
     final icon = _getCategoryIcon(widget.entry.category);
+    final hasImage = widget.entry.imagePaths.isNotEmpty;
 
-    // Listener obsługuje efekt 3D (pochylanie)
     return Listener(
       onPointerMove: _handlePointerMove,
       onPointerUp: (_) => _resetCard(),
-      onPointerCancel: (_) =>
-          _resetCard(), // Naprawa zacinania przy scrollowaniu
+      onPointerCancel: (_) => _resetCard(),
 
       child: Transform(
         transform: Matrix4.identity()
@@ -138,6 +128,7 @@ class _MoodCardState extends State<MoodCard>
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(24),
+            // Usunięto 'image: ...' - wracamy do koloru
             boxShadow: [
               BoxShadow(
                 color: color.withOpacity(0.4),
@@ -166,12 +157,29 @@ class _MoodCardState extends State<MoodCard>
                     ),
                     child: Icon(icon, color: Colors.white, size: 20),
                   ),
-                  Text(
-                    DateFormat(
-                      'dd MMM, HH:mm',
-                      'pl_PL',
-                    ).format(widget.entry.date),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  // Data i ikonka zdjęcia
+                  Row(
+                    children: [
+                      if (hasImage)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6.0),
+                          child: Icon(
+                            Icons.photo_library,
+                            color: Colors.white.withOpacity(0.8),
+                            size: 16,
+                          ),
+                        ),
+                      Text(
+                        DateFormat(
+                          'dd MMM, HH:mm',
+                          'pl_PL',
+                        ).format(widget.entry.date),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
