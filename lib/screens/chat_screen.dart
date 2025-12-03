@@ -12,7 +12,7 @@ import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/animated_button.dart';
 
-// --- WIADOMOŚĆ PRZESUWANA (SWIPE) ---
+// --- WIADOMOŚĆ PRZESUWANA ---
 class SlidableMessage extends StatefulWidget {
   final Widget child;
   final DateTime? time;
@@ -185,6 +185,68 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // --- METODY POMOCNICZE ---
+
+  void _showPersonaSelector() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Wybierz osobowość",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Colors.blueAccent,
+                child: Icon(Icons.face, color: Colors.white),
+              ),
+              title: const Text(
+                "Asystent",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text("Głos męski"),
+              trailing: !appSettings.isAiFemale
+                  ? const Icon(Icons.check_circle, color: AppColors.primaryBlue)
+                  : null,
+              onTap: () {
+                if (appSettings.isAiFemale) {
+                  appSettings.toggleGender(false);
+                }
+                Navigator.pop(ctx);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Colors.pinkAccent,
+                child: Icon(Icons.face_3, color: Colors.white),
+              ),
+              title: const Text(
+                "Asystentka",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text("Głos żeński"),
+              trailing: appSettings.isAiFemale
+                  ? const Icon(Icons.check_circle, color: Colors.pinkAccent)
+                  : null,
+              onTap: () {
+                if (!appSettings.isAiFemale) {
+                  appSettings.toggleGender(true);
+                  // USUNIĘTO WYMUSZONE POWITANIE
+                }
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showFullImage(String path) {
     HapticFeedback.selectionClick();
     showDialog(
@@ -219,9 +281,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // POPRAWKA: Metoda do załączania zdjęcia z historii z walidacją
   void _attachImageFromHistory(String path) {
-    // Sprawdzamy czy to zdjęcie jest już dodane do TEJ wiadomości
     if (_tempChatImages.contains(path)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -254,6 +314,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _isSoundEnabled = !_isSoundEnabled;
     });
+
     if (!_isSoundEnabled) {
       _ttsService.stop();
     } else {
@@ -429,13 +490,14 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       _isTyping = true;
 
-      // POPRAWKA: Dodajemy tylko te zdjęcia, których jeszcze nie ma w bazie wpisu
-      // Aby uniknąć duplikatów w sekcji "Ostatnie zdjęcia"
+      // Dodajemy tylko unikalne zdjęcia do historii wpisu
+      List<String> newImagePaths = List.from(_currentEntry.imagePaths);
       for (var path in imagesToSend) {
-        if (!_currentEntry.imagePaths.contains(path)) {
-          _currentEntry.imagePaths.add(path);
+        if (!newImagePaths.contains(path)) {
+          newImagePaths.add(path);
         }
       }
+      _currentEntry.imagePaths = newImagePaths;
 
       _tempChatImages.clear();
       _inputController.clear();
@@ -681,47 +743,36 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               onPressed: widget.onBack,
             ),
-            title: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
-                  child: Icon(
-                    appSettings.isAiFemale ? Icons.face_3 : Icons.face,
-                    color: AppColors.primaryBlue,
+            // NAGŁÓWEK Z WYBOREM OSOBOWOŚCI
+            title: GestureDetector(
+              onTap: _showPersonaSelector,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+                    child: Icon(
+                      appSettings.isAiFemale ? Icons.face_3 : Icons.face,
+                      color: AppColors.primaryBlue,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Asystent AI",
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        appSettings.isAiFemale
+                            ? "Asystentka AI"
+                            : "Asystent AI",
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          "Dostępny",
-                          style: TextStyle(color: Colors.green, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
             actions: [
               Builder(
@@ -756,14 +807,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
-                          SwitchListTile(
-                            title: const Text("Przełącz na asystentkę"),
-                            value: appSettings.isAiFemale,
-                            activeColor: AppColors.primaryBlue,
-                            onChanged: (v) {
-                              appSettings.toggleGender(v);
-                            },
-                          ),
                           SwitchListTile(
                             title: const Text("Tryb Ciemny"),
                             value: appSettings.isDarkMode,
@@ -824,81 +867,102 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                             onTap: _showClearOrDeleteDialog,
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const Divider(),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Twoje ostatnie zdjęcia",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        if (_currentEntry.imagePaths.isEmpty)
-                          Container(
-                            height: 100,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.black26
-                                  : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white10
-                                    : Colors.grey.shade300,
-                              ),
-                            ),
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.photo_library_outlined,
-                                    color: Colors.grey.shade400,
-                                    size: 30,
+                          const Divider(),
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  "Twoje ostatnie zdjęcia",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
                                   ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    "Brak ostatnich zdjęć",
-                                    style: TextStyle(
-                                      color: Colors.grey.shade500,
-                                      fontSize: 12,
+                                ),
+                                const SizedBox(height: 10),
+                                if (_currentEntry.imagePaths.isEmpty)
+                                  Container(
+                                    height: 100,
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.black26
+                                          : Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? Colors.white10
+                                            : Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.photo_library_outlined,
+                                            color: Colors.grey.shade400,
+                                            size: 30,
+                                          ),
+                                          const SizedBox(height: 5),
+                                          Text(
+                                            "Brak ostatnich zdjęć",
+                                            style: TextStyle(
+                                              color: Colors.grey.shade500,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  SizedBox(
+                                    height: 100,
+                                    child: ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount:
+                                          _currentEntry.imagePaths.length,
+                                      separatorBuilder: (ctx, i) =>
+                                          const SizedBox(width: 8),
+                                      itemBuilder: (context, index) {
+                                        final path =
+                                            _currentEntry.imagePaths[index];
+                                        return GestureDetector(
+                                          onTap: () => _showFullImage(path),
+                                          onLongPress: () =>
+                                              _attachImageFromHistory(path),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            child: Image.file(
+                                              File(path),
+                                              width: 100,
+                                              height: 100,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (c, o, s) =>
+                                                  Container(
+                                                    width: 100,
+                                                    height: 100,
+                                                    color: Colors.grey,
+                                                    child: const Icon(
+                                                      Icons.broken_image,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          )
-                        else
-                          SizedBox(
-                            height: 100,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _currentEntry.imagePaths.length,
-                              separatorBuilder: (ctx, i) =>
-                                  const SizedBox(width: 8),
-                              itemBuilder: (context, index) {
-                                final path = _currentEntry.imagePaths[index];
-                                // Użycie nowego widgetu z animacją (LongPressAnimatedImage)
-                                return LongPressAnimatedImage(
-                                  path: path,
-                                  onTap: () => _showFullImage(path),
-                                  onLongPress: () =>
-                                      _attachImageFromHistory(path),
-                                );
-                              },
+                              ],
                             ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -911,7 +975,6 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
-                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 4,
@@ -929,9 +992,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         time: msg['time'] as DateTime?,
                         child: GestureDetector(
                           onTap: () {
-                            if (!isUser && msg['text'] != null) {
-                              HapticFeedback.selectionClick();
-                            } else if (msg['role'] == 'user_image') {
+                            if (msg['role'] == 'user_image') {
                               _showFullImage(msg['path']!);
                             }
                           },
@@ -939,7 +1000,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             margin: const EdgeInsets.only(bottom: 16),
                             padding: msg['role'] == 'user_image'
                                 ? const EdgeInsets.all(4)
-                                : const EdgeInsets.all(12),
+                                : const EdgeInsets.all(16),
                             constraints: BoxConstraints(
                               maxWidth:
                                   MediaQuery.of(context).size.width * 0.75,
@@ -1087,6 +1148,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+
                           Bounceable(
                             onTap: _toggleSound,
                             child: Container(
@@ -1112,8 +1174,13 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+
                           Expanded(
                             child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 0,
+                              ),
                               decoration: BoxDecoration(
                                 color: inputBgColor,
                                 borderRadius: BorderRadius.circular(20),
@@ -1143,7 +1210,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                   isDense: true,
                                   contentPadding: const EdgeInsets.all(12),
                                 ),
-                                onChanged: (v) => setState(() {}),
                               ),
                             ),
                           ),
@@ -1192,6 +1258,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final textColor = isSelected
         ? Colors.white
         : (isDark ? Colors.white70 : Colors.black87);
+
     return Expanded(
       child: AnimatedPressButton(
         onTap: onTap,
@@ -1213,80 +1280,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- NOWY WIDGET Z ANIMACJĄ PRZYTRZYMANIA ---
-class LongPressAnimatedImage extends StatefulWidget {
-  final String path;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  const LongPressAnimatedImage({
-    super.key,
-    required this.path,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  @override
-  State<LongPressAnimatedImage> createState() => _LongPressAnimatedImageState();
-}
-
-class _LongPressAnimatedImageState extends State<LongPressAnimatedImage>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 150),
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.9,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      onLongPress: () {
-        widget.onLongPress();
-        _controller.reverse();
-      },
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) => _controller.reverse(),
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            File(widget.path),
-            width: 100,
-            height: 100,
-            fit: BoxFit.cover,
-            errorBuilder: (c, o, s) => Container(
-              width: 100,
-              height: 100,
-              color: Colors.grey,
-              child: const Icon(Icons.broken_image),
             ),
           ),
         ),
