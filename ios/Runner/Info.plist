@@ -53,5 +53,11 @@
     <key>NSSpeechRecognitionUsageDescription</key>
     <key>NSPhotoLibraryUsageDescription</key>
     <key>NSCameraUsageDescription</key>
+	<key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+    <key>NSLocalNetworkUsageDescription</key>
 </dict>
 </plist>

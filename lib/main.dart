@@ -6,6 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
 
 import 'Services/database_service.dart';
+import 'Services/api_service.dart'; // Pamiętaj o tym imporcie!
 import 'models/mood_entry.dart';
 import 'screens/calendar_screen.dart' show CalendarScreen, CalendarScreenState;
 import 'screens/home_screen.dart' show HomeScreenUI, HomeScreenUIState;
@@ -109,6 +110,7 @@ class MoodJournalApp extends StatelessWidget {
                 iconTheme: IconThemeData(color: AppColors.textDark),
               ),
               textTheme: const TextTheme(
+                // Stała wielkość czcionki dla interfejsu (niezależna od suwaka w czacie)
                 bodyMedium: TextStyle(
                   fontSize: 14.0,
                   color: AppColors.textDark,
@@ -136,6 +138,7 @@ class MoodJournalApp extends StatelessWidget {
                 iconTheme: IconThemeData(color: AppColors.textLight),
               ),
               textTheme: const TextTheme(
+                // Stała wielkość czcionki dla interfejsu
                 bodyMedium: TextStyle(
                   fontSize: 14.0,
                   color: AppColors.textLight,
@@ -161,105 +164,174 @@ class MoodJournalApp extends StatelessWidget {
   }
 }
 
-// --- 4. EKRAN LOGOWANIA ---
-class LoginScreen extends StatelessWidget {
+// --- 4. EKRAN LOGOWANIA / REJESTRACJI (ZINTEGROWANY Z BACKENDEM) ---
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  void _handleRegister() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Podaj email i hasło")));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    // Połączenie z backendem przez ApiService
+    final success = await ApiService().registerUser(email, password);
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Konto utworzone! Witaj w Mood Journal."),
+          backgroundColor: Colors.green,
+        ),
+      );
+      // Przejście do głównej aplikacji po sukcesie
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainAppScaffold()),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Błąd rejestracji. Sprawdź dane lub serwer."),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.primaryBlue,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.auto_awesome,
-                        size: 80,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                    const Text(
-                      "Mood Journal",
-                      style: TextStyle(
-                        fontSize: 42,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      "Twój osobisty asystent emocjonalny",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                        height: 1.5,
-                      ),
-                    ),
-                    const Spacer(),
-
-                    Bounceable(
-                      scaleFactor: 0.85,
-                      onTap: () async {
-                        HapticFeedback.lightImpact();
-                        await Future.delayed(const Duration(milliseconds: 50));
-
-                        if (context.mounted) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const MainAppScaffold(),
-                            ),
-                          );
-                        }
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        alignment: Alignment.center,
-                        child: const Text(
-                          "Rozpocznij podróż",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primaryBlue,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome,
+                    size: 60,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 24),
+                const Text(
+                  "Mood Journal",
+                  style: TextStyle(
+                    fontSize: 32,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Zarejestruj się, aby rozpocząć",
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+                const SizedBox(height: 40),
+
+                // Pole Email
+                TextField(
+                  controller: _emailController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "Email",
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                    prefixIcon: const Icon(Icons.email, color: Colors.white70),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.1),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Pole Hasło
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "Hasło",
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                    prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.1),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // Przycisk Rejestracji
+                Bounceable(
+                  scaleFactor: 0.95,
+                  onTap: _isLoading ? () {} : _handleRegister,
+                  child: Container(
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            "Zarejestruj się",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryBlue,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
