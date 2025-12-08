@@ -96,7 +96,6 @@ class MoodJournalApp extends StatelessWidget {
                 ? ThemeMode.dark
                 : ThemeMode.light,
 
-            // MOTYW JASNY
             theme: ThemeData(
               useMaterial3: true,
               brightness: Brightness.light,
@@ -122,7 +121,6 @@ class MoodJournalApp extends StatelessWidget {
               ),
             ),
 
-            // MOTYW CIEMNY
             darkTheme: ThemeData(
               useMaterial3: true,
               brightness: Brightness.dark,
@@ -197,13 +195,11 @@ class _LoginScreenState extends State<LoginScreen> {
     String message = "";
 
     if (_isLoginMode) {
-      // LOGOWANIE
       success = await ApiService().loginUser(email, password);
       message = success
           ? "Zalogowano pomyślnie!"
           : "Błąd logowania. Sprawdź dane.";
     } else {
-      // REJESTRACJA
       success = await ApiService().registerUser(email, password);
       if (success) {
         await ApiService().loginUser(email, password);
@@ -242,7 +238,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -256,8 +251,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // Tytuł
                 const Text(
                   "Mood Journal",
                   style: TextStyle(
@@ -267,8 +260,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-
-                // Podtytuł
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   child: Text(
@@ -278,8 +269,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-
-                // Email
                 TextField(
                   controller: _emailController,
                   style: const TextStyle(color: Colors.white),
@@ -297,8 +286,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Hasło
                 TextField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
@@ -329,8 +316,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-
-                // Przycisk
                 Bounceable(
                   scaleFactor: 0.95,
                   onTap: _isLoading ? () {} : _handleSubmit,
@@ -365,10 +350,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                   ),
                 ),
-
                 const SizedBox(height: 24),
-
-                // Przełącznik trybu (POPRAWIONE CZYSZCZENIE DANYCH)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -380,7 +362,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       onTap: () {
                         setState(() {
                           _isLoginMode = !_isLoginMode;
-                          // --- POPRAWKA: Czyszczenie formularza przy zmianie trybu ---
                           _emailController.clear();
                           _passwordController.clear();
                         });
@@ -454,7 +435,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
               style: TextStyle(color: AppColors.textGrey),
             ),
             const SizedBox(height: 20),
-
             Bounceable(
               scaleFactor: 0.85,
               onTap: () {
@@ -501,7 +481,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
               ),
             ),
             const SizedBox(height: 12),
-
             Bounceable(
               scaleFactor: 0.9,
               onTap: () {
@@ -533,9 +512,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                 ),
               ),
             ),
-
             const SizedBox(height: 12),
-
             Bounceable(
               scaleFactor: 0.9,
               onTap: () {
@@ -752,7 +729,14 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   }
 
   void _showEntryPicker(BuildContext context) async {
-    final entries = await DatabaseService.instance.readAllEntries();
+    // ZMIANA: Pobieranie ID i użycie nowej metody filtrującej
+    final currentUserId = ApiService().currentUserId;
+    if (currentUserId == null) return;
+
+    final entries = await DatabaseService.instance.readEntriesForUser(
+      currentUserId,
+    );
+
     if (!mounted) return;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;

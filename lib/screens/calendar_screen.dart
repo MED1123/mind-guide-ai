@@ -4,10 +4,11 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
 import '../Services/database_service.dart';
-import '../Services/api_service.dart'; // Import serwisu API
+import '../Services/api_service.dart';
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
+import '../widgets/mood_analysis_widget.dart'; // Import nowego widgetu
 
 class CalendarScreen extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
@@ -33,22 +34,28 @@ class CalendarScreenState extends State<CalendarScreen> {
   }
 
   void loadEvents() async {
-    // NOWA LOGIKA: Hybrydowe ładowanie danych
     List<MoodEntry> entries = [];
+    final currentUserId = ApiService().currentUserId;
+
+    if (currentUserId == null) return;
 
     // 1. Próba pobrania z serwera
     try {
       entries = await ApiService().getEntries();
 
       // 2. Jeśli serwer zwrócił pustą listę (np. brak neta lub brak wpisów na serwerze),
-      // spróbuj załadować z lokalnej bazy.
+      // spróbuj załadować z lokalnej bazy (tylko dla tego użytkownika).
       if (entries.isEmpty) {
-        entries = await DatabaseService.instance.readAllEntries();
+        entries = await DatabaseService.instance.readEntriesForUser(
+          currentUserId,
+        );
       }
     } catch (e) {
       print("Błąd API, wczytuję lokalnie: $e");
-      // 3. W razie błędu połączenia, wczytaj lokalnie
-      entries = await DatabaseService.instance.readAllEntries();
+      // 3. W razie błędu połączenia, wczytaj lokalnie dla tego użytkownika
+      entries = await DatabaseService.instance.readEntriesForUser(
+        currentUserId,
+      );
     }
 
     final Map<DateTime, List<MoodEntry>> data = {};
@@ -99,6 +106,8 @@ class CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
           ),
+
+          // --- 1. KALENDARZ ---
           SliverToBoxAdapter(
             child: Card(
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -173,6 +182,14 @@ class CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
           ),
+
+          // --- 2. NOWY WIDGET ANALIZY ---
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          const SliverToBoxAdapter(
+            child: MoodAnalysisWidget(), // Tutaj wstawiamy nasz widget
+          ),
+
+          // --- 3. LISTA WPISÓW ---
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 30, 24, 10),

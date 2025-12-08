@@ -10,7 +10,8 @@ class DatabaseService {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('mood_journal_v3.db');
+    // Zmiana nazwy pliku wymusi utworzenie nowej bazy z nowym schematem
+    _database = await _initDB('mood_journal_v4.db');
     return _database!;
   }
 
@@ -30,7 +31,8 @@ class DatabaseService {
       category TEXT NOT NULL,
       aiAnalysis TEXT NOT NULL,
       conversation TEXT NOT NULL,
-      imagePaths TEXT NOT NULL -- Nowa kolumna na ścieżki zdjęć
+      imagePaths TEXT NOT NULL,
+      owner_id INTEGER NOT NULL
     )
     ''');
   }
@@ -47,15 +49,23 @@ class DatabaseService {
       'aiAnalysis': entry.aiAnalysis,
       'conversation': entry.conversation,
       'imagePaths': imagesString,
+      // Zapisujemy ID właściciela (jeśli null, dajemy 0, choć nie powinno się to zdarzyć)
+      'owner_id': entry.ownerId ?? 0,
     });
   }
 
-  Future<List<MoodEntry>> readAllEntries() async {
+  // ZMIANA: Pobieramy wpisy tylko dla konkretnego użytkownika
+  Future<List<MoodEntry>> readEntriesForUser(int userId) async {
     final db = await instance.database;
-    final result = await db.query('mood_entries', orderBy: 'date DESC');
+
+    final result = await db.query(
+      'mood_entries',
+      where: 'owner_id = ?',
+      whereArgs: [userId],
+      orderBy: 'date DESC',
+    );
 
     return result.map((json) {
-      // Konwersja stringa z bazy z powrotem na listę
       String imagesStr = json['imagePaths'] as String? ?? "";
       List<String> images = imagesStr.isEmpty ? [] : imagesStr.split('|');
 
@@ -68,6 +78,7 @@ class DatabaseService {
         aiAnalysis: json['aiAnalysis'] as String,
         conversation: json['conversation'] as String? ?? "",
         imagePaths: images,
+        ownerId: json['owner_id'] as int?,
       );
     }).toList();
   }

@@ -9,7 +9,7 @@ import '../Services/api_service.dart'; // Import serwisu API
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
-import '../widgets/animated_button.dart';
+// import '../widgets/animated_button.dart'; // Jeśli używasz
 
 class HomeScreenUI extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
@@ -33,7 +33,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   final TextEditingController _textController = TextEditingController();
   String? _selectedCategory;
   bool _wantAI = false;
-  // Nowa zmienna lokalna do wyboru płci przy tworzeniu wpisu
   bool _tempIsAiFemale = false;
 
   final ImagePicker _picker = ImagePicker();
@@ -54,13 +53,18 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   void initState() {
     super.initState();
     refreshEntries();
-    // Domyślnie ustawiamy lokalną płeć na taką, jak w ustawieniach globalnych
     _tempIsAiFemale = appSettings.isAiFemale;
   }
 
   void refreshEntries() {
     setState(() {
-      _entriesFuture = DatabaseService.instance.readAllEntries();
+      // POPRAWKA: Pobieramy ID i filtrujemy
+      final userId = ApiService().currentUserId;
+      if (userId != null) {
+        _entriesFuture = DatabaseService.instance.readEntriesForUser(userId);
+      } else {
+        _entriesFuture = Future.value([]);
+      }
     });
   }
 
@@ -88,36 +92,39 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     });
   }
 
-  // Logika zwijania (Toggle)
   void _onCategorySelected(String category) {
     HapticFeedback.selectionClick();
     setState(() {
       if (_selectedCategory == category) {
-        // Jeśli kliknięto w to samo -> zwiń (odznacz)
         _selectedCategory = null;
         _wantAI = false;
       } else {
-        // Jeśli kliknięto w nowe -> zaznacz i ustaw domyślną chęć na AI
         _selectedCategory = category;
         _wantAI =
             !category.toLowerCase().contains('radosny') &&
             !category.toLowerCase().contains('spokojny');
-        // Resetujemy wybór płci do domyślnego z ustawień
         _tempIsAiFemale = appSettings.isAiFemale;
       }
     });
   }
 
-  // --- ZMODYFIKOWANA FUNKCJA ZAPISU (LOKALNIE + SERWER) ---
   void _handleSend() async {
     HapticFeedback.mediumImpact();
     if ((_textController.text.isEmpty && _attachedImages.isEmpty) ||
         _selectedCategory == null)
       return;
 
+    // POPRAWKA: Sprawdzenie zalogowania
+    final currentUserId = ApiService().currentUserId;
+    if (currentUserId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Błąd: Użytkownik nie jest zalogowany")),
+      );
+      return;
+    }
+
     String conversationInit = _wantAI ? "User: ${_textController.text}|" : "";
 
-    // Jeśli użytkownik wybrał AI i zmienił płeć w tym ekranie, aktualizujemy ustawienia globalne
     if (_wantAI) {
       appSettings.toggleGender(_tempIsAiFemale);
     }
@@ -130,12 +137,13 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       aiAnalysis: "",
       conversation: conversationInit,
       imagePaths: List.from(_attachedImages),
+      ownerId: currentUserId, // KLUCZOWE: Przypisanie właściciela
     );
 
-    // 1. Zapisujemy lokalnie (żeby działało offline i w kalendarzu od razu)
+    // 1. Zapis lokalny z ID
     int id = await DatabaseService.instance.createEntry(newEntry);
 
-    // 2. Próbujemy wysłać na serwer (NOWOŚĆ)
+    // 2. Zapis na serwerze
     try {
       await ApiService().createEntry(newEntry);
     } catch (e) {
@@ -151,6 +159,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       aiAnalysis: newEntry.aiAnalysis,
       conversation: newEntry.conversation,
       imagePaths: newEntry.imagePaths,
+      ownerId: currentUserId,
     );
 
     refreshEntries();
@@ -265,8 +274,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                         : Column(
                             children: [
                               const SizedBox(height: 32),
-
-                              // POLE TEKSTOWE I ZDJĘCIA
                               Container(
                                 decoration: BoxDecoration(
                                   color: unselectedBgColor,
@@ -394,8 +401,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                 ),
                               ),
                               const SizedBox(height: 20),
-
-                              // SEKCJA WYBORU ASYSTENTA
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -431,8 +436,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                       ),
                                     ],
                                   ),
-
-                                  // Wybór płci
                                   if (_wantAI) ...[
                                     const SizedBox(height: 16),
                                     Text(
@@ -472,7 +475,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                   ],
                                 ],
                               ),
-
                               const SizedBox(height: 24),
                               Bounceable(
                                 onTap: _handleSend,
@@ -504,9 +506,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                             ],
                           ),
                   ),
-
                   const SizedBox(height: 40),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -556,7 +556,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                       );
                     },
                   ),
-
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 8.0),
