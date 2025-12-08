@@ -4,6 +4,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
 import '../Services/database_service.dart';
+import '../Services/api_service.dart'; // Import serwisu API
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
@@ -32,7 +33,24 @@ class CalendarScreenState extends State<CalendarScreen> {
   }
 
   void loadEvents() async {
-    final entries = await DatabaseService.instance.readAllEntries();
+    // NOWA LOGIKA: Hybrydowe ładowanie danych
+    List<MoodEntry> entries = [];
+
+    // 1. Próba pobrania z serwera
+    try {
+      entries = await ApiService().getEntries();
+
+      // 2. Jeśli serwer zwrócił pustą listę (np. brak neta lub brak wpisów na serwerze),
+      // spróbuj załadować z lokalnej bazy.
+      if (entries.isEmpty) {
+        entries = await DatabaseService.instance.readAllEntries();
+      }
+    } catch (e) {
+      print("Błąd API, wczytuję lokalnie: $e");
+      // 3. W razie błędu połączenia, wczytaj lokalnie
+      entries = await DatabaseService.instance.readAllEntries();
+    }
+
     final Map<DateTime, List<MoodEntry>> data = {};
     for (var entry in entries) {
       final dateKey = DateTime.utc(
@@ -197,7 +215,6 @@ class CalendarScreenState extends State<CalendarScreen> {
                           HapticFeedback.lightImpact();
                           widget.onOpenChat(entry);
                         },
-                        // POPRAWKA: Usunięto onTap: null
                         child: MoodCard(entry: entry),
                       ),
                     );

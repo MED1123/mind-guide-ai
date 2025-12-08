@@ -20,7 +20,8 @@ class ApiService {
     return url;
   }
 
-  // --- REJESTRACJA ---
+  // --- AUTH ---
+
   Future<bool> registerUser(String email, String password) async {
     final url = Uri.parse('$_baseUrl/auth/register');
     try {
@@ -38,7 +39,6 @@ class ApiService {
     }
   }
 
-  // --- LOGOWANIE ---
   Future<bool> loginUser(String email, String password) async {
     final url = Uri.parse('$_baseUrl/auth/login');
     try {
@@ -63,14 +63,15 @@ class ApiService {
     }
   }
 
-  // --- TWORZENIE WPISU (NOWOŚĆ) ---
+  // --- WPISY (ENTRIES) ---
+
+  // 1. Wysyłanie wpisu na serwer
   Future<bool> createEntry(MoodEntry entry) async {
     if (currentUserId == null) {
       print("Błąd: Nie zalogowano użytkownika!");
       return false;
     }
 
-    // Endpoint: /entries/{user_id}
     final url = Uri.parse('$_baseUrl/entries/$currentUserId');
     print("Wysyłanie wpisu na: $url");
 
@@ -83,7 +84,6 @@ class ApiService {
               "text": entry.text,
               "mood_rating": entry.moodRating,
               "category": entry.category,
-              // Wysyłamy listę ścieżek do zdjęć
               "image_paths": entry.imagePaths,
             }),
           )
@@ -99,6 +99,46 @@ class ApiService {
     } catch (e) {
       print("Błąd połączenia przy zapisie: $e");
       return false;
+    }
+  }
+
+  // 2. Pobieranie wpisów z serwera (do Kalendarza)
+  Future<List<MoodEntry>> getEntries() async {
+    if (currentUserId == null) return [];
+
+    // Używamy endpointu dedykowanego dla użytkownika
+    final url = Uri.parse('$_baseUrl/entries/$currentUserId');
+
+    try {
+      final response = await http.get(url).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        // Dekodujemy UTF-8 dla polskich znaków
+        List<dynamic> body = jsonDecode(utf8.decode(response.bodyBytes));
+
+        List<MoodEntry> entries = body.map((dynamic item) {
+          return MoodEntry(
+            id: item['id'],
+            date: DateTime.parse(item['date']),
+            text: item['text'],
+            moodRating: (item['mood_rating'] as num).toDouble(),
+            category: item['category'],
+            aiAnalysis: item['ai_analysis'] ?? "",
+            conversation: item['conversation'] ?? "",
+            imagePaths: List<String>.from(item['image_paths'] ?? []),
+            // Teraz to zadziała, bo zaktualizowaliśmy model:
+            ownerId: item['owner_id'],
+          );
+        }).toList();
+
+        return entries;
+      } else {
+        print("Błąd pobierania wpisów: ${response.statusCode}");
+        return [];
+      }
+    } catch (e) {
+      print("Błąd połączenia (pobieranie): $e");
+      return [];
     }
   }
 }

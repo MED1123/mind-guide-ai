@@ -7,6 +7,7 @@ class MoodEntry {
   String aiAnalysis;
   String conversation;
   List<String> imagePaths;
+  final int? ownerId;
 
   MoodEntry({
     this.id,
@@ -17,5 +18,6 @@ class MoodEntry {
     required this.aiAnalysis,
     this.conversation = "",
     this.imagePaths = const [],
+    this.ownerId,
   });
 }

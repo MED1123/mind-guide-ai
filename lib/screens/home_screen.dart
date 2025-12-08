@@ -5,7 +5,7 @@ import 'package:flutter_bounceable/flutter_bounceable.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../Services/database_service.dart';
-import '../Services/api_service.dart'; // <--- DODANY IMPORT
+import '../Services/api_service.dart'; // Import serwisu API
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
@@ -108,7 +108,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     });
   }
 
-  // --- ZMODYFIKOWANA FUNKCJA ZAPISU ---
+  // --- ZMODYFIKOWANA FUNKCJA ZAPISU (LOKALNIE + SERWER) ---
   void _handleSend() async {
     HapticFeedback.mediumImpact();
     if ((_textController.text.isEmpty && _attachedImages.isEmpty) ||
@@ -140,7 +140,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       await ApiService().createEntry(newEntry);
     } catch (e) {
       print("Nie udało się zsynchronizować z serwerem: $e");
-      // Tutaj można dodać logikę kolejkowania offline, jeśli chcemy być pro :)
     }
 
     final entryWithId = MoodEntry(
@@ -167,9 +166,9 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     FocusScope.of(context).unfocus();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Zapisano wpis (Lokalnie + Chmura)!")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Zapisano wpis!")));
     }
 
     if (widget.onPostCreated != null) {
@@ -433,7 +432,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                     ],
                                   ),
 
-                                  // Wybór płci (widoczne tylko gdy wybrano TAK)
+                                  // Wybór płci
                                   if (_wantAI) ...[
                                     const SizedBox(height: 16),
                                     Text(
