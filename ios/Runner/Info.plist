@@ -46,18 +46,27 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
-    <true/>
-    <key>LSSupportsOpeningDocumentsInPlace</key>
-    <true/>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <key>NSCameraUsageDescription</key>
+	<string>Aplikacja wymaga dostępu do mikrofonu do nagrywania notatek.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Aplikacja wymaga dostępu do rozpoznawania mowy.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aplikacja wymaga dostępu do galerii, aby wybierać zdjęcia.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikacja wymaga dostępu do aparatu, aby robić zdjęcia.</string>
 	<key>NSAppTransportSecurity</key>
-    <dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <true/>
-    </dict>
-    <key>NSLocalNetworkUsageDescription</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Aplikacja wymaga dostępu do sieci lokalnej, aby połączyć się z serwerem.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp</string>
+	</array>
 </dict>
 </plist>

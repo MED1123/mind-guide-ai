@@ -6,7 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
 
 import 'Services/database_service.dart';
-import 'Services/api_service.dart'; // Pamiętaj o tym imporcie!
+import 'Services/api_service.dart';
 import 'models/mood_entry.dart';
 import 'screens/calendar_screen.dart' show CalendarScreen, CalendarScreenState;
 import 'screens/home_screen.dart' show HomeScreenUI, HomeScreenUIState;
@@ -74,7 +74,7 @@ Future<void> main() async {
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
-    print("INFO: Brak pliku .env");
+    print("INFO: Brak pliku .env lub błąd ładowania: $e");
   }
   runApp(const MoodJournalApp());
 }
@@ -110,7 +110,6 @@ class MoodJournalApp extends StatelessWidget {
                 iconTheme: IconThemeData(color: AppColors.textDark),
               ),
               textTheme: const TextTheme(
-                // Stała wielkość czcionki dla interfejsu (niezależna od suwaka w czacie)
                 bodyMedium: TextStyle(
                   fontSize: 14.0,
                   color: AppColors.textDark,
@@ -138,7 +137,6 @@ class MoodJournalApp extends StatelessWidget {
                 iconTheme: IconThemeData(color: AppColors.textLight),
               ),
               textTheme: const TextTheme(
-                // Stała wielkość czcionki dla interfejsu
                 bodyMedium: TextStyle(
                   fontSize: 14.0,
                   color: AppColors.textLight,
@@ -164,7 +162,7 @@ class MoodJournalApp extends StatelessWidget {
   }
 }
 
-// --- 4. EKRAN LOGOWANIA / REJESTRACJI (ZINTEGROWANY Z BACKENDEM) ---
+// --- 4. EKRAN LOGOWANIA / REJESTRACJI ---
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -175,9 +173,14 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  bool _isPasswordVisible = false;
+  bool _isLoginMode = true;
   bool _isLoading = false;
 
-  void _handleRegister() async {
+  void _handleSubmit() async {
+    FocusScope.of(context).unfocus();
+
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -190,30 +193,40 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // Połączenie z backendem przez ApiService
-    final success = await ApiService().registerUser(email, password);
+    bool success;
+    String message = "";
+
+    if (_isLoginMode) {
+      // LOGOWANIE
+      success = await ApiService().loginUser(email, password);
+      message = success
+          ? "Zalogowano pomyślnie!"
+          : "Błąd logowania. Sprawdź dane.";
+    } else {
+      // REJESTRACJA
+      success = await ApiService().registerUser(email, password);
+      if (success) {
+        await ApiService().loginUser(email, password);
+        message = "Konto utworzone! Witaj.";
+      } else {
+        message = "Błąd rejestracji. Email może być zajęty.";
+      }
+    }
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Konto utworzone! Witaj w Mood Journal."),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.green),
       );
-      // Przejście do głównej aplikacji po sukcesie
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const MainAppScaffold()),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Błąd rejestracji. Sprawdź dane lub serwer."),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     }
   }
@@ -229,6 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Logo
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -242,6 +256,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+
+                // Tytuł
                 const Text(
                   "Mood Journal",
                   style: TextStyle(
@@ -251,19 +267,26 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  "Zarejestruj się, aby rozpocząć",
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
+
+                // Podtytuł
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(
+                    _isLoginMode ? "Witaj ponownie!" : "Utwórz nowe konto",
+                    key: ValueKey(_isLoginMode),
+                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
                 ),
                 const SizedBox(height: 40),
 
-                // Pole Email
+                // Email
                 TextField(
                   controller: _emailController,
                   style: const TextStyle(color: Colors.white),
+                  keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    hintText: "Email",
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                    labelText: "Email",
+                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
                     prefixIcon: const Icon(Icons.email, color: Colors.white70),
                     filled: true,
                     fillColor: Colors.white.withOpacity(0.1),
@@ -275,15 +298,28 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Pole Hasło
+                // Hasło
                 TextField(
                   controller: _passwordController,
-                  obscureText: true,
+                  obscureText: !_isPasswordVisible,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: "Hasło",
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                    labelText: "Hasło",
+                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
                     prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: Colors.white70,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
+                    ),
                     filled: true,
                     fillColor: Colors.white.withOpacity(0.1),
                     border: OutlineInputBorder(
@@ -294,10 +330,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Przycisk Rejestracji
+                // Przycisk
                 Bounceable(
                   scaleFactor: 0.95,
-                  onTap: _isLoading ? () {} : _handleRegister,
+                  onTap: _isLoading ? () {} : _handleSubmit,
                   child: Container(
                     width: double.infinity,
                     height: 56,
@@ -319,9 +355,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             height: 24,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text(
-                            "Zarejestruj się",
-                            style: TextStyle(
+                        : Text(
+                            _isLoginMode ? "Zaloguj się" : "Zarejestruj się",
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                               color: AppColors.primaryBlue,
@@ -329,6 +365,37 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                   ),
                 ),
+
+                const SizedBox(height: 24),
+
+                // Przełącznik trybu (POPRAWIONE CZYSZCZENIE DANYCH)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _isLoginMode ? "Nie masz konta? " : "Masz już konto? ",
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _isLoginMode = !_isLoginMode;
+                          // --- POPRAWKA: Czyszczenie formularza przy zmianie trybu ---
+                          _emailController.clear();
+                          _passwordController.clear();
+                        });
+                      },
+                      child: Text(
+                        _isLoginMode ? "Zarejestruj się" : "Zaloguj się",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
               ],
             ),
           ),
