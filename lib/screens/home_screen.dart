@@ -9,7 +9,7 @@ import '../Services/api_service.dart'; // Import serwisu API
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
-// import '../widgets/animated_button.dart'; // Jeśli używasz
+import 'dart:math';
 
 class HomeScreenUI extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
@@ -182,6 +182,87 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
     if (widget.onPostCreated != null) {
       widget.onPostCreated!(entryWithId, userWantedAI);
+    }
+  }
+
+  // --- FUNKCJA TESTOWA (DEV ONLY) ---
+  void _generateTestEntries() async {
+    final userId = ApiService().currentUserId;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Błąd: Zaloguj się najpierw!")),
+      );
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Generowanie historii... to potrwa chwilę."),
+      ),
+    );
+
+    final random = Random();
+    // Sztywne definicje, aby wykres wyglądał ładnie
+    final testData = [
+      // Dziś
+      (0, "Jestem radosny 😃", 4.5),
+      (0, "Jestem spokojny 😌", 4.0),
+      // Wczoraj
+      (1, "Jestem zmęczony 😴", 2.5),
+      (1, "Jestem zestresowany 😫", 2.0),
+      // 2 dni temu
+      (2, "Jestem smutny 😔", 2.0),
+      // 3 dni temu
+      (3, "Jestem zły 😡", 1.5),
+      (3, "Jestem zestresowany 😫", 2.0),
+      // 5 dni temu
+      (5, "Jestem spokojny 😌", 4.0),
+      (5, "Jestem radosny 😃", 5.0),
+      // Tydzień temu
+      (7, "Jestem radosny 😃", 4.8),
+    ];
+
+    for (var data in testData) {
+      final daysAgo = data.$1;
+      final category = data.$2;
+      final rating = data.$3;
+
+      // Tworzymy datę wsteczną
+      final date = DateTime.now().subtract(
+        Duration(days: daysAgo, minutes: random.nextInt(100)),
+      );
+
+      final entry = MoodEntry(
+        date: date,
+        text: "Testowy wpis historyczny (sprzed $daysAgo dni).",
+        moodRating: rating,
+        category: category,
+        aiAnalysis: "Symulowana analiza historyczna.",
+        conversation: "",
+        imagePaths: [],
+        ownerId: userId,
+      );
+
+      // 1. Baza lokalna
+      await DatabaseService.instance.createEntry(entry);
+
+      // 2. API (Teraz z poprawną datą dzięki poprawce w ApiService)
+      try {
+        await ApiService().createEntry(entry);
+      } catch (e) {
+        print("Błąd API: $e");
+      }
+
+      // Małe opóźnienie, żeby nie zablokować UI
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Gotowe! Sprawdź wykresy w Kalendarzu.")),
+      );
+      refreshEntries();
     }
   }
 
@@ -503,6 +584,27 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                   ),
                                 ),
                               ),
+                              // ---------------------------------------------------
+                              // TUTAJ DODANO PRZYCISK DEWELOPERSKI
+                              // ---------------------------------------------------
+                              const SizedBox(height: 20),
+                              Center(
+                                child: TextButton.icon(
+                                  onPressed: _generateTestEntries,
+                                  icon: const Icon(
+                                    Icons.bug_report,
+                                    color: Colors.orange,
+                                  ),
+                                  label: const Text(
+                                    "Generuj przykładowe dane (Demo)",
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // ---------------------------------------------------
                             ],
                           ),
                   ),

@@ -11,6 +11,7 @@ import 'models/mood_entry.dart';
 import 'screens/calendar_screen.dart' show CalendarScreen, CalendarScreenState;
 import 'screens/home_screen.dart' show HomeScreenUI, HomeScreenUIState;
 import 'screens/chat_screen.dart';
+import 'screens/profile_screen.dart';
 import 'widgets/edit_entry_screen.dart';
 import 'widgets/mood_card.dart';
 
@@ -96,6 +97,7 @@ class MoodJournalApp extends StatelessWidget {
                 ? ThemeMode.dark
                 : ThemeMode.light,
 
+            // MOTYW JASNY
             theme: ThemeData(
               useMaterial3: true,
               brightness: Brightness.light,
@@ -121,6 +123,7 @@ class MoodJournalApp extends StatelessWidget {
               ),
             ),
 
+            // MOTYW CIEMNY
             darkTheme: ThemeData(
               useMaterial3: true,
               brightness: Brightness.dark,
@@ -171,6 +174,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _usernameController =
+      TextEditingController(); // NOWY KONTROLER
 
   bool _isPasswordVisible = false;
   bool _isLoginMode = true;
@@ -181,11 +186,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
+    final username = _usernameController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Podaj email i hasło")));
+      return;
+    }
+
+    if (!_isLoginMode && username.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Podaj nazwę użytkownika")));
       return;
     }
 
@@ -195,15 +208,17 @@ class _LoginScreenState extends State<LoginScreen> {
     String message = "";
 
     if (_isLoginMode) {
+      // LOGOWANIE
       success = await ApiService().loginUser(email, password);
       message = success
           ? "Zalogowano pomyślnie!"
           : "Błąd logowania. Sprawdź dane.";
     } else {
-      success = await ApiService().registerUser(email, password);
+      // REJESTRACJA
+      success = await ApiService().registerUser(email, username, password);
       if (success) {
         await ApiService().loginUser(email, password);
-        message = "Konto utworzone! Witaj.";
+        message = "Konto utworzone! Witaj $username.";
       } else {
         message = "Błąd rejestracji. Email może być zajęty.";
       }
@@ -238,6 +253,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Logo
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -251,6 +267,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+
+                // Tytuł
                 const Text(
                   "Mood Journal",
                   style: TextStyle(
@@ -260,6 +278,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
+
+                // Podtytuł
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   child: Text(
@@ -269,6 +289,33 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
+
+                // Nazwa użytkownika (tylko przy rejestracji)
+                if (!_isLoginMode) ...[
+                  TextField(
+                    controller: _usernameController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: "Nazwa użytkownika",
+                      labelStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.person,
+                        color: Colors.white70,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.1),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Email
                 TextField(
                   controller: _emailController,
                   style: const TextStyle(color: Colors.white),
@@ -286,6 +333,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                // Hasło
                 TextField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
@@ -316,6 +365,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
+
+                // Przycisk
                 Bounceable(
                   scaleFactor: 0.95,
                   onTap: _isLoading ? () {} : _handleSubmit,
@@ -350,7 +401,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                   ),
                 ),
+
                 const SizedBox(height: 24),
+
+                // Przełącznik trybu
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -364,6 +418,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           _isLoginMode = !_isLoginMode;
                           _emailController.clear();
                           _passwordController.clear();
+                          _usernameController.clear();
                         });
                       },
                       child: Text(
@@ -411,6 +466,13 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
     });
   }
 
+  void _goToProfile() {
+    setState(() {
+      _currentIndex = 3;
+      _activeChatEntry = null;
+    });
+  }
+
   void _openChatWithEntry(MoodEntry entry) {
     setState(() {
       _activeChatEntry = entry;
@@ -435,6 +497,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
               style: TextStyle(color: AppColors.textGrey),
             ),
             const SizedBox(height: 20),
+
             Bounceable(
               scaleFactor: 0.85,
               onTap: () {
@@ -481,6 +544,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
               ),
             ),
             const SizedBox(height: 12),
+
             Bounceable(
               scaleFactor: 0.9,
               onTap: () {
@@ -512,7 +576,9 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                 ),
               ),
             ),
+
             const SizedBox(height: 12),
+
             Bounceable(
               scaleFactor: 0.9,
               onTap: () {
@@ -729,7 +795,6 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   }
 
   void _showEntryPicker(BuildContext context) async {
-    // ZMIANA: Pobieranie ID i użycie nowej metody filtrującej
     final currentUserId = ApiService().currentUserId;
     if (currentUserId == null) return;
 
@@ -829,7 +894,11 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
           onPostCreated: _handlePostCreated,
         );
       case 1:
-        return CalendarScreen(key: _calendarKey, onOpenChat: _handleEntryTap);
+        return CalendarScreen(
+          key: _calendarKey,
+          onOpenChat: _handleEntryTap,
+          onGoToProfile: _goToProfile,
+        );
       case 2:
         if (_activeChatEntry == null) {
           return const Center(child: Text("Wybierz temat rozmowy w menu"));
@@ -840,7 +909,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
           onGoToCalendar: _goToCalendar,
         );
       case 3:
-        return const PlaceholderScreen(title: "Profil");
+        return const ProfileScreen();
       default:
         return HomeScreenUI(key: _homeKey);
     }

@@ -8,12 +8,17 @@ import '../Services/api_service.dart';
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
-import '../widgets/mood_analysis_widget.dart'; // Import nowego widgetu
+import '../widgets/mood_analysis_widget.dart';
 
 class CalendarScreen extends StatefulWidget {
   final Function(MoodEntry) onOpenChat;
+  final VoidCallback? onGoToProfile;
 
-  const CalendarScreen({super.key, this.onOpenChat = _defaultOpenChat});
+  const CalendarScreen({
+    super.key,
+    this.onOpenChat = _defaultOpenChat,
+    this.onGoToProfile,
+  });
 
   static void _defaultOpenChat(MoodEntry e) {}
 
@@ -39,20 +44,14 @@ class CalendarScreenState extends State<CalendarScreen> {
 
     if (currentUserId == null) return;
 
-    // 1. Próba pobrania z serwera
     try {
       entries = await ApiService().getEntries();
-
-      // 2. Jeśli serwer zwrócił pustą listę (np. brak neta lub brak wpisów na serwerze),
-      // spróbuj załadować z lokalnej bazy (tylko dla tego użytkownika).
       if (entries.isEmpty) {
         entries = await DatabaseService.instance.readEntriesForUser(
           currentUserId,
         );
       }
     } catch (e) {
-      print("Błąd API, wczytuję lokalnie: $e");
-      // 3. W razie błędu połączenia, wczytaj lokalnie dla tego użytkownika
       entries = await DatabaseService.instance.readEntriesForUser(
         currentUserId,
       );
@@ -107,7 +106,6 @@ class CalendarScreenState extends State<CalendarScreen> {
             ),
           ),
 
-          // --- 1. KALENDARZ ---
           SliverToBoxAdapter(
             child: Card(
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -183,13 +181,11 @@ class CalendarScreenState extends State<CalendarScreen> {
             ),
           ),
 
-          // --- 2. NOWY WIDGET ANALIZY ---
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          const SliverToBoxAdapter(
-            child: MoodAnalysisWidget(), // Tutaj wstawiamy nasz widget
-          ),
 
-          // --- 3. LISTA WPISÓW ---
+          // NOWY WIDGET ANALIZY (z obsługą SWIPE)
+          const SliverToBoxAdapter(child: MoodAnalysisWidget()),
+
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 30, 24, 10),
@@ -204,6 +200,7 @@ class CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
           ),
+
           selectedEvents.isEmpty
               ? SliverToBoxAdapter(
                   child: Padding(
