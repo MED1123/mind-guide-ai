@@ -6,7 +6,8 @@ import 'package:flutter_bounceable/flutter_bounceable.dart';
 import 'package:image_picker/image_picker.dart';
 import '../Services/api_service.dart';
 import '../models/mood_analysis.dart';
-import '../main.dart';
+import '../main.dart'; // AppColors, AppSettings
+import 'analysis_detail_screen.dart'; // Import
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,6 +17,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  // ... (Kod stanu i logiki bez zmian) ...
   MoodAnalysis? _analysis;
   bool _isLoadingAnalysis = false;
   bool _isLoadingProfile = false;
@@ -100,10 +102,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- LOGIKA WYBORU DATY (ROLKA/KALENDARZ) ---
   Future<void> _pickDate() async {
     DateTime initialDate = DateTime.now();
-    // Próba parsowania obecnej daty z pola (jeśli jest)
     if (_dobController.text.isNotEmpty) {
       try {
         final parts = _dobController.text.split('.');
@@ -118,7 +118,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     if (Platform.isIOS) {
-      // ROLKA DLA IPHONE
       final isDark = Theme.of(context).brightness == Brightness.dark;
       showCupertinoModalPopup(
         context: context,
@@ -151,7 +150,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     } else {
-      // KALENDARZ DLA ANDROIDA
       final picked = await showDatePicker(
         context: context,
         initialDate: initialDate,
@@ -179,6 +177,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  void _openAnalysisDetail() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            AnalysisDetailScreen(currentRange: 'Tydzień', analysis: _analysis),
+        fullscreenDialog: true,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -198,7 +207,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Nagłówek
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -251,7 +259,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       subtitle: "Twoje emocje",
                       icon: Icons.auto_awesome,
                       iconColor: AppColors.primaryBlue,
-                      onTap: _showAnalysisDetails,
+                      onTap: _openAnalysisDetail,
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -375,6 +383,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // --- WIDGETY POMOCNICZE ---
+
   Widget _buildUserProfileCard(bool isDark, Color textColor) {
     ImageProvider? imageProvider;
     if (_profileImagePath.isNotEmpty) {
@@ -490,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Bounceable(
       onTap: onTap,
       child: Container(
-        height: 150,
+        height: 170,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -542,7 +552,160 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- EDYCJA DANYCH ---
+  void _showSettingsBottomSheet(bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final sheetBgColor = isDark
+                ? const Color(0xFF1E1E1E)
+                : Colors.white;
+            final sheetTextColor = isDark ? Colors.white : Colors.black87;
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.6,
+              decoration: BoxDecoration(
+                color: sheetBgColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  SwitchListTile(
+                    title: Text(
+                      "Tryb ciemny",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: sheetTextColor,
+                      ),
+                    ),
+                    value: appSettings.isDarkMode,
+                    activeColor: AppColors.primaryBlue,
+                    secondary: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.dark_mode,
+                        size: 20,
+                        color: isDark ? Colors.white : Colors.indigo,
+                      ),
+                    ),
+                    onChanged: (bool value) {
+                      appSettings.toggleTheme(value);
+                      setModalState(() {});
+                      setState(() {});
+                    },
+                  ),
+
+                  const Divider(),
+
+                  _buildSettingsItem(
+                    icon: Icons.lock_outline,
+                    title: "Zmień hasło",
+                    onTap: () {},
+                    isDark: isDark,
+                  ),
+                  _buildSettingsItem(
+                    icon: Icons.language,
+                    title: "Zmień język",
+                    trailing: const Text("🇵🇱"),
+                    onTap: () {},
+                    isDark: isDark,
+                  ),
+                  _buildSettingsItem(
+                    icon: Icons.privacy_tip_outlined,
+                    title: "Polityka prywatności",
+                    onTap: () {},
+                    isDark: isDark,
+                  ),
+                  _buildSettingsItem(
+                    icon: Icons.help_outline,
+                    title: "Pomoc / Kontakt",
+                    onTap: () {},
+                    isDark: isDark,
+                  ),
+
+                  const Spacer(),
+
+                  _buildSettingsItem(
+                    icon: Icons.delete_outline,
+                    title: "Usuń konto",
+                    textColor: Colors.red,
+                    iconColor: Colors.red,
+                    onTap: () {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Funkcja w budowie")),
+                      );
+                    },
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSettingsItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    required bool isDark,
+    Widget? trailing,
+    Color? textColor,
+    Color? iconColor,
+  }) {
+    final defaultColor = isDark ? Colors.white : Colors.black87;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: (iconColor ?? defaultColor).withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, size: 20, color: iconColor ?? defaultColor),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: textColor ?? defaultColor,
+        ),
+      ),
+      trailing:
+          trailing ??
+          const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+    );
+  }
+
   void _showEditProfileSheet() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -597,11 +760,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 12),
 
-              // --- POLE DATY URODZENIA (ZMIENIONE) ---
               GestureDetector(
-                onTap: _pickDate, // Otwiera rolkę/kalendarz
+                onTap: _pickDate,
                 child: AbsorbPointer(
-                  // Blokuje klawiaturę
                   child: _buildTextField(
                     "Data urodzenia",
                     _dobController,
@@ -689,241 +850,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
-
-  void _showSettingsBottomSheet(bool isDark) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final sheetBgColor = isDark
-                ? const Color(0xFF1E1E1E)
-                : Colors.white;
-            final sheetTextColor = isDark ? Colors.white : Colors.black87;
-
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.6,
-              decoration: BoxDecoration(
-                color: sheetBgColor,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              child: Column(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-
-                  SwitchListTile(
-                    title: Text(
-                      "Tryb ciemny",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: sheetTextColor,
-                      ),
-                    ),
-                    value: appSettings.isDarkMode,
-                    activeColor: AppColors.primaryBlue,
-                    secondary: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.indigo.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.dark_mode,
-                        size: 20,
-                        color: isDark ? Colors.white : Colors.indigo,
-                      ),
-                    ),
-                    onChanged: (bool value) {
-                      appSettings.toggleTheme(value);
-                      setModalState(() {});
-                      setState(() {});
-                    },
-                  ),
-                  const Divider(),
-                  _buildSettingsItem(
-                    icon: Icons.lock_outline,
-                    title: "Zmień hasło",
-                    onTap: () {},
-                    isDark: isDark,
-                  ),
-                  _buildSettingsItem(
-                    icon: Icons.language,
-                    title: "Zmień język",
-                    trailing: const Text("🇵🇱"),
-                    onTap: () {},
-                    isDark: isDark,
-                  ),
-                  _buildSettingsItem(
-                    icon: Icons.privacy_tip_outlined,
-                    title: "Polityka prywatności",
-                    onTap: () {},
-                    isDark: isDark,
-                  ),
-                  _buildSettingsItem(
-                    icon: Icons.help_outline,
-                    title: "Pomoc / Kontakt",
-                    onTap: () {},
-                    isDark: isDark,
-                  ),
-                  const Spacer(),
-                  _buildSettingsItem(
-                    icon: Icons.delete_outline,
-                    title: "Usuń konto",
-                    textColor: Colors.red,
-                    iconColor: Colors.red,
-                    onTap: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Funkcja w budowie")),
-                      );
-                    },
-                    isDark: isDark,
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSettingsItem({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-    required bool isDark,
-    Widget? trailing,
-    Color? textColor,
-    Color? iconColor,
-  }) {
-    final defaultColor = isDark ? Colors.white : Colors.black87;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: (iconColor ?? defaultColor).withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, size: 20, color: iconColor ?? defaultColor),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: textColor ?? defaultColor,
-        ),
-      ),
-      trailing:
-          trailing ??
-          const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-    );
-  }
-
-  void _showAnalysisDetails() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        builder: (_, controller) => Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SingleChildScrollView(
-            controller: controller,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.auto_awesome,
-                      color: AppColors.primaryBlue,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        "Szczegółowa Analiza AI",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                if (_isLoadingAnalysis)
-                  const Center(child: CircularProgressIndicator())
-                else if (_analysis == null)
-                  const Text("Brak danych do wyświetlenia.")
-                else
-                  Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryBlue.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: AppColors.primaryBlue.withOpacity(0.2),
-                          ),
-                        ),
-                        child: Text(
-                          _analysis!.aiSuggestion,
-                          style: TextStyle(
-                            fontSize: 16,
-                            height: 1.6,
-                            color: Theme.of(context).textTheme.bodyLarge?.color,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
-            ),
-          ),
         ),
       ),
     );

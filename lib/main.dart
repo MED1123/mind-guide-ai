@@ -174,12 +174,26 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _usernameController =
-      TextEditingController(); // NOWY KONTROLER
+  final TextEditingController _usernameController = TextEditingController();
+
+  final FocusNode _usernameFocus = FocusNode();
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
 
   bool _isPasswordVisible = false;
   bool _isLoginMode = true;
   bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _usernameFocus.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
 
   void _handleSubmit() async {
     FocusScope.of(context).unfocus();
@@ -208,13 +222,11 @@ class _LoginScreenState extends State<LoginScreen> {
     String message = "";
 
     if (_isLoginMode) {
-      // LOGOWANIE
       success = await ApiService().loginUser(email, password);
       message = success
           ? "Zalogowano pomyślnie!"
           : "Błąd logowania. Sprawdź dane.";
     } else {
-      // REJESTRACJA
       success = await ApiService().registerUser(email, username, password);
       if (success) {
         await ApiService().loginUser(email, password);
@@ -244,6 +256,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Styl dla pól tekstowych (mniejsza czcionka dla długich maili)
+    const inputTextStyle = TextStyle(color: Colors.white, fontSize: 14.0);
+    // Padding wewnętrzny (zwiększony komfort pisania, mniejsze marginesy boczne)
+    const inputDecorationContentPadding = EdgeInsets.symmetric(
+      horizontal: 16,
+      vertical: 18,
+    );
+
     return Scaffold(
       backgroundColor: AppColors.primaryBlue,
       body: SafeArea(
@@ -294,7 +314,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (!_isLoginMode) ...[
                   TextField(
                     controller: _usernameController,
-                    style: const TextStyle(color: Colors.white),
+                    focusNode: _usernameFocus,
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) {
+                      FocusScope.of(context).requestFocus(_emailFocus);
+                    },
+                    style: inputTextStyle,
                     decoration: InputDecoration(
                       labelText: "Nazwa użytkownika",
                       labelStyle: TextStyle(
@@ -306,6 +331,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       filled: true,
                       fillColor: Colors.white.withOpacity(0.1),
+                      contentPadding: inputDecorationContentPadding,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide.none,
@@ -318,14 +344,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Email
                 TextField(
                   controller: _emailController,
-                  style: const TextStyle(color: Colors.white),
+                  focusNode: _emailFocus,
                   keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) {
+                    FocusScope.of(context).requestFocus(_passwordFocus);
+                  },
+                  style: inputTextStyle,
                   decoration: InputDecoration(
                     labelText: "Email",
                     labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
                     prefixIcon: const Icon(Icons.email, color: Colors.white70),
                     filled: true,
                     fillColor: Colors.white.withOpacity(0.1),
+                    contentPadding: inputDecorationContentPadding,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
@@ -337,8 +369,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Hasło
                 TextField(
                   controller: _passwordController,
+                  focusNode: _passwordFocus,
                   obscureText: !_isPasswordVisible,
-                  style: const TextStyle(color: Colors.white),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _handleSubmit(),
+                  style: inputTextStyle,
                   decoration: InputDecoration(
                     labelText: "Hasło",
                     labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
@@ -358,6 +393,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     filled: true,
                     fillColor: Colors.white.withOpacity(0.1),
+                    contentPadding: inputDecorationContentPadding,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
