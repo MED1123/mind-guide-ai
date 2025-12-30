@@ -31,22 +31,73 @@ class HomeScreenUI extends StatefulWidget {
 
 class HomeScreenUIState extends State<HomeScreenUI> {
   final TextEditingController _textController = TextEditingController();
-  String? _selectedCategory;
   bool _wantAI = false;
   bool _tempIsAiFemale = false;
+
 
   final ImagePicker _picker = ImagePicker();
   List<String> _attachedImages = [];
 
-  final List<String> _categories = [
-    "Jestem spokojny 😌",
-    "Jestem radosny 😃",
-    "Jestem zestresowany 😫",
-    "Jestem smutny 😔",
-    "Jestem zmęczony 😴",
-    "Jestem zły 😡",
-  ];
+  // --- KONFIGURACJA DANYCH ---
+  final Map<String, Map<String, dynamic>> _moodCategories = {
+    "Negatywne": {
+      "color": AppColors.cardRed,
+      "icon": Icons.sentiment_very_dissatisfied,
+      "moods": [
+        "zły",
+        "zmęczony",
+        "smutny",
+        "zestresowany",
+        "poirytowany",
+        "przytłoczony",
+        "zniechęcony",
+        "rozczarowany",
+        "zmartwiony",
+        "samotny",
+        "znudzony",
+        "bezradny",
+        "przestraszony",
+        "zawiedziony",
+      ],
+    },
+    "Pozytywne": {
+      "color": Colors.green,
+      "icon": Icons.sentiment_very_satisfied,
+      "moods": [
+        "spokojny",
+        "radosny",
+        "szczęśliwy",
+        "zadowolony",
+        "entuzjastyczny",
+        "pełen energii",
+        "optymistyczny",
+        "wdzięczny",
+        "rozluźniony",
+        "pewny siebie",
+        "dumny",
+        "zainspirowany",
+      ],
+    },
+    "Neutralne": {
+      "color": Colors.amber,
+      "icon": Icons.sentiment_neutral,
+      "moods": [
+        "obojętny",
+        "zamyślony",
+        "ciekawy",
+        "niepewny",
+        "zaskoczony",
+        "nostalgiczny",
+        "ostrożny",
+      ],
+    },
+  };
 
+  // Stan wyboru
+  String? _selectedMainCategory; // np. "Negatywne"
+  String? _selectedSpecificMood; // np. "zły"
+
+  // Pozostałe zmienne
   late Future<List<MoodEntry>> _entriesFuture;
 
   @override
@@ -58,7 +109,6 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
   void refreshEntries() {
     setState(() {
-      // POPRAWKA: Pobieramy ID i filtrujemy
       final userId = ApiService().currentUserId;
       if (userId != null) {
         _entriesFuture = DatabaseService.instance.readEntriesForUser(userId);
@@ -92,17 +142,37 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     });
   }
 
-  void _onCategorySelected(String category) {
+  // Wybór głównej kategorii (Negatywne / Pozytywne / Neutralne)
+  void _onMainCategoryTap(String category) {
     HapticFeedback.selectionClick();
     setState(() {
-      if (_selectedCategory == category) {
-        _selectedCategory = null;
+      if (_selectedMainCategory == category) {
+        // Odznaczenie
+        _selectedMainCategory = null;
+        _selectedSpecificMood = null;
         _wantAI = false;
       } else {
-        _selectedCategory = category;
-        _wantAI =
-            !category.toLowerCase().contains('radosny') &&
-            !category.toLowerCase().contains('spokojny');
+        // Zaznaczenie nowej
+        _selectedMainCategory = category;
+        _selectedSpecificMood = null; // Reset konkretnego nastroju
+      }
+    });
+  }
+
+  // Wybór konkretnego nastroju (np. "zły")
+  void _onSpecificMoodTap(String mood) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_selectedSpecificMood == mood) {
+        _selectedSpecificMood = null;
+        _wantAI = false;
+      } else {
+        _selectedSpecificMood = mood;
+        
+        // Logika AI domyślnie wyłączona dla pozytywnych
+        bool isPositive = _selectedMainCategory == "Pozytywne";
+        _wantAI = !isPositive;
+        
         _tempIsAiFemale = appSettings.isAiFemale;
       }
     });
@@ -111,10 +181,9 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   void _handleSend() async {
     HapticFeedback.mediumImpact();
     if ((_textController.text.isEmpty && _attachedImages.isEmpty) ||
-        _selectedCategory == null)
+        _selectedSpecificMood == null)
       return;
 
-    // POPRAWKA: Sprawdzenie zalogowania
     final currentUserId = ApiService().currentUserId;
     if (currentUserId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -129,38 +198,44 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       appSettings.toggleGender(_tempIsAiFemale);
     }
 
+    // Dodaję emoji do nazwy kategorii w bazie, dla zachowania spójności
+    // lub po prostu zapisuję goły tekst. 
+    // Wcześniej było np. "Jestem zły 😡". Teraz user wybiera "zły".
+    // Możemy dodać emoji na podstawie głównej kategorii lub zostawić samo "zły".
+    // Zostawiam samo + ewentualnie emoji głównej kategorii dla czytelności?
+    // Decyzja: Zapisuję tak jak wybrał user + emoji z mapy jeśli chcemy, 
+    // ale prościej zapisać po prostu string "zły".
+    
     final newEntry = MoodEntry(
       date: DateTime.now(),
       text: _textController.text,
-      moodRating: 3.0,
-      category: _selectedCategory!,
+      moodRating: _calculateRating(_selectedMainCategory!),
+      category: _selectedSpecificMood!, 
       aiAnalysis: "",
       conversation: conversationInit,
       imagePaths: List.from(_attachedImages),
-      ownerId: currentUserId, // KLUCZOWE: Przypisanie właściciela
+      ownerId: currentUserId,
     );
 
-    // 1. Zapis lokalny z ID
     int id = await DatabaseService.instance.createEntry(newEntry);
 
-    // 2. Zapis na serwerze
     try {
       await ApiService().createEntry(newEntry);
     } catch (e) {
       print("Nie udało się zsynchronizować z serwerem: $e");
     }
 
+    // Hack na odświeżenie listy z nowym ID
     final entryWithId = MoodEntry(
-      id: id,
-      date: newEntry.date,
-      text: newEntry.text,
-      moodRating: newEntry.moodRating,
-      category: newEntry.category,
-      aiAnalysis: newEntry.aiAnalysis,
-      conversation: newEntry.conversation,
-      imagePaths: newEntry.imagePaths,
-      ownerId: currentUserId,
-    );
+        id: id,
+        date: newEntry.date,
+        text: newEntry.text,
+        moodRating: newEntry.moodRating,
+        category: newEntry.category,
+        aiAnalysis: newEntry.aiAnalysis,
+        conversation: newEntry.conversation,
+        imagePaths: newEntry.imagePaths,
+        ownerId: currentUserId);
 
     refreshEntries();
 
@@ -168,7 +243,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
     _textController.clear();
     setState(() {
-      _selectedCategory = null;
+      _selectedMainCategory = null;
+      _selectedSpecificMood = null;
       _wantAI = false;
       _attachedImages.clear();
     });
@@ -182,6 +258,17 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
     if (widget.onPostCreated != null) {
       widget.onPostCreated!(entryWithId, userWantedAI);
+    }
+  }
+
+  double _calculateRating(String mainCategory) {
+    switch (mainCategory) {
+      case "Pozytywne":
+        return 5.0;
+      case "Negatywne":
+        return 1.0;
+      default:
+        return 3.0;
     }
   }
 
@@ -206,21 +293,21 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     // Sztywne definicje, aby wykres wyglądał ładnie
     final testData = [
       // Dziś
-      (0, "Jestem radosny 😃", 4.5),
-      (0, "Jestem spokojny 😌", 4.0),
+      (0, "radosny", 4.5),
+      (0, "spokojny", 4.0),
       // Wczoraj
-      (1, "Jestem zmęczony 😴", 2.5),
-      (1, "Jestem zestresowany 😫", 2.0),
+      (1, "zmęczony", 2.5),
+      (1, "zestresowany", 2.0),
       // 2 dni temu
-      (2, "Jestem smutny 😔", 2.0),
+      (2, "smutny", 2.0),
       // 3 dni temu
-      (3, "Jestem zły 😡", 1.5),
-      (3, "Jestem zestresowany 😫", 2.0),
+      (3, "zły", 1.5),
+      (3, "zestresowany", 2.0),
       // 5 dni temu
-      (5, "Jestem spokojny 😌", 4.0),
-      (5, "Jestem radosny 😃", 5.0),
+      (5, "spokojny", 4.0),
+      (5, "radosny", 5.0),
       // Tydzień temu
-      (7, "Jestem radosny 😃", 4.8),
+      (7, "radosny", 4.8),
     ];
 
     for (var data in testData) {
@@ -247,14 +334,13 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       // 1. Baza lokalna
       await DatabaseService.instance.createEntry(entry);
 
-      // 2. API (Teraz z poprawną datą dzięki poprawce w ApiService)
+      // 2. API
       try {
         await ApiService().createEntry(entry);
       } catch (e) {
         print("Błąd API: $e");
       }
 
-      // Małe opóźnienie, żeby nie zablokować UI
       await Future.delayed(const Duration(milliseconds: 100));
     }
 
@@ -267,17 +353,13 @@ class HomeScreenUIState extends State<HomeScreenUI> {
   }
 
   String _getHintText() {
-    return _selectedCategory == null ? "" : "Opisz jak się czujesz...";
+    return _selectedSpecificMood == null ? "" : "Opisz dlaczego czujesz się $_selectedSpecificMood...";
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final unselectedBgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final unselectedBorderColor = isDark
-        ? AppColors.primaryBlue
-        : Colors.grey.shade200;
-    final unselectedTextColor = isDark ? Colors.white : AppColors.textGrey;
 
     return SafeArea(
       child: Column(
@@ -292,55 +374,62 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                   Text(
                     "Jak się dzisiaj czujesz?",
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontSize: 32,
-                      height: 1.2,
-                    ),
+                          fontSize: 32,
+                          height: 1.2,
+                        ),
                   ),
                   const SizedBox(height: 32),
 
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 12,
-                    children: _categories.map((category) {
-                      final isSelected = _selectedCategory == category;
-                      return Bounceable(
-                        onTap: () => _onCategorySelected(category),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppColors.primaryBlue
-                                : unselectedBgColor,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isSelected
-                                  ? AppColors.primaryBlue
-                                  : unselectedBorderColor,
-                            ),
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: AppColors.primaryBlue.withOpacity(
-                                        0.3,
-                                      ),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
+                  // 1. GŁÓWNE KATEGORIE
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: _moodCategories.entries.map((entry) {
+                      final catName = entry.key;
+                      final data = entry.value;
+                      final isSelected = _selectedMainCategory == catName;
+                      final color = data['color'] as Color;
+                      final icon = data['icon'] as IconData;
+
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                          child: Bounceable(
+                            onTap: () => _onMainCategoryTap(catName),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              height: 100,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? color.withOpacity(0.2)
+                                    : unselectedBgColor,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? color
+                                      : (isDark ? Colors.white12 : Colors.grey.shade200),
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    icon,
+                                    color: isSelected ? color : Colors.grey,
+                                    size: 32,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    catName,
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? color
+                                          : (isDark ? Colors.white70 : Colors.black54),
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                  ]
-                                : [],
-                          ),
-                          child: Text(
-                            category,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? Colors.white
-                                  : unselectedTextColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
+                                  )
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -348,9 +437,73 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                     }).toList(),
                   ),
 
+                  // 2. SZCZEGÓŁOWE NASTROJE (Wysuwane)
                   AnimatedSize(
                     duration: const Duration(milliseconds: 300),
-                    child: _selectedCategory == null
+                    alignment: Alignment.topCenter,
+                    child: _selectedMainCategory == null
+                        ? const SizedBox.shrink()
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 24),
+                              Text(
+                                "Doprecyzuj:",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white70 : Colors.black54,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: (_moodCategories[_selectedMainCategory]!['moods'] as List<String>)
+                                    .map((mood) {
+                                  final isSelected = _selectedSpecificMood == mood;
+                                  final mainColor = _moodCategories[_selectedMainCategory]!['color'] as Color;
+
+                                  return Bounceable(
+                                    onTap: () => _onSpecificMoodTap(mood),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 200),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? mainColor
+                                            : unselectedBgColor,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? mainColor
+                                              : (isDark ? Colors.white12 : Colors.grey.shade200),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        mood,
+                                        style: TextStyle(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : (isDark ? Colors.white : Colors.black87),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                  ),
+
+                  // 3. FORMULARZ WPISU (Wysuwany po wyborze nastroju)
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    child: _selectedSpecificMood == null // Zmieniono warunek
                         ? const SizedBox.shrink()
                         : Column(
                             children: [

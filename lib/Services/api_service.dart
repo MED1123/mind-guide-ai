@@ -15,8 +15,8 @@ class ApiService {
   String get _baseUrl {
     final url = dotenv.env['API_URL'];
     if (url == null) {
-      if (Platform.isAndroid) return "http://10.0.2.2:8000";
-      return "http://127.0.0.1:8000";
+      if (Platform.isAndroid) return "http://10.0.2.2:8888";
+      return "http://127.0.0.1:8888";
     }
     return url;
   }

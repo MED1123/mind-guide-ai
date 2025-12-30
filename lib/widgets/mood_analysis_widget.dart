@@ -53,8 +53,8 @@ class _MoodAnalysisWidgetState extends State<MoodAnalysisWidget> {
       context,
       MaterialPageRoute(
         builder: (context) => AnalysisDetailScreen(
-          currentRange: _ranges[_currentIndex],
-          analysis: _analysis,
+          initialRange: _ranges[_currentIndex],
+          initialAnalysis: _analysis,
         ),
         fullscreenDialog: true,
       ),

@@ -182,7 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context,
       MaterialPageRoute(
         builder: (context) =>
-            AnalysisDetailScreen(currentRange: 'Tydzień', analysis: _analysis),
+            AnalysisDetailScreen(initialRange: 'Tydzień', initialAnalysis: _analysis),
         fullscreenDialog: true,
       ),
     );
@@ -552,7 +552,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showSettingsBottomSheet(bool isDark) {
+  void _showSettingsBottomSheet(bool initialIsDark) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -560,10 +560,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final sheetBgColor = isDark
+            // ODŚWIEŻAMY STAN MOTYWU Z appSettings
+            final isCurrentDark = appSettings.isDarkMode;
+
+            final sheetBgColor = isCurrentDark
                 ? const Color(0xFF1E1E1E)
                 : Colors.white;
-            final sheetTextColor = isDark ? Colors.white : Colors.black87;
+            final sheetTextColor = isCurrentDark ? Colors.white : Colors.black87;
 
             return Container(
               height: MediaQuery.of(context).size.height * 0.6,
@@ -594,7 +597,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: sheetTextColor,
                       ),
                     ),
-                    value: appSettings.isDarkMode,
+                    value: isCurrentDark,
                     activeColor: AppColors.primaryBlue,
                     secondary: Container(
                       padding: const EdgeInsets.all(8),
@@ -605,12 +608,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Icon(
                         Icons.dark_mode,
                         size: 20,
-                        color: isDark ? Colors.white : Colors.indigo,
+                        color: isCurrentDark ? Colors.white : Colors.indigo,
                       ),
                     ),
                     onChanged: (bool value) {
                       appSettings.toggleTheme(value);
                       setModalState(() {});
+                      // Odświeżamy też ekran pod spodem
                       setState(() {});
                     },
                   ),
@@ -621,26 +625,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.lock_outline,
                     title: "Zmień hasło",
                     onTap: () {},
-                    isDark: isDark,
+                    isDark: isCurrentDark,
                   ),
                   _buildSettingsItem(
                     icon: Icons.language,
                     title: "Zmień język",
                     trailing: const Text("🇵🇱"),
                     onTap: () {},
-                    isDark: isDark,
+                    isDark: isCurrentDark,
                   ),
                   _buildSettingsItem(
                     icon: Icons.privacy_tip_outlined,
                     title: "Polityka prywatności",
                     onTap: () {},
-                    isDark: isDark,
+                    isDark: isCurrentDark,
                   ),
                   _buildSettingsItem(
                     icon: Icons.help_outline,
                     title: "Pomoc / Kontakt",
                     onTap: () {},
-                    isDark: isDark,
+                    isDark: isCurrentDark,
                   ),
 
                   const Spacer(),
@@ -656,7 +660,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SnackBar(content: Text("Funkcja w budowie")),
                       );
                     },
-                    isDark: isDark,
+                    isDark: isCurrentDark,
                   ),
                   const SizedBox(height: 20),
                 ],

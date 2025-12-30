@@ -55,6 +55,9 @@ class GptService {
       }
     }
 
+    // Modulo Qwen obsługuje zdjęcia, więc nie blokujemy ich.
+
+
     if (imagePaths != null && imagePaths.isNotEmpty) {
       List<Map<String, dynamic>> contentList = [];
 
@@ -67,7 +70,7 @@ class GptService {
         });
       }
 
-      for (String path in imagePaths) {
+      for (String path in imagePaths!) {
         try {
           final bytes = await File(path).readAsBytes();
           final base64Image = base64Encode(bytes);
@@ -91,7 +94,7 @@ class GptService {
     }
 
     final body = jsonEncode({
-      "model": "x-ai/grok-4.1-fast:free",
+      "model": "mistralai/mistral-small-3.1-24b-instruct:free",
       "messages": messages,
       "temperature": 0.7,
       "max_tokens": 1000,

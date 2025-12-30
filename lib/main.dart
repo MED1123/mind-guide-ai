@@ -868,9 +868,14 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
             const SizedBox(height: 16),
             Expanded(
               child: ListView.separated(
-                itemCount: entries.length,
+                itemCount: entries.length > 4 ? 4 : entries.length,
                 separatorBuilder: (c, i) => const Divider(height: 1),
                 itemBuilder: (context, index) {
+                  // Sortujemy od najnowszych (odwracamy listę jeśli przychodzi rosnąco)
+                  // Tutaj zakładamy, że baza zwraca chronologicznie, więc bierzemy od końca.
+                  // Ale lepiej sprawdźmy sortowanie. Dla pewności sortujemy tutaj:
+                  entries.sort((a, b) => b.date.compareTo(a.date));
+                  
                   final entry = entries[index];
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -885,6 +890,26 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                     ),
                   );
                 },
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _goToCalendar();
+                },
+                icon: const Icon(Icons.calendar_month),
+                label: const Text("Przejdź do kalendarza"),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: textColor,
+                  side: BorderSide(color: textColor.withOpacity(0.3)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
             ),
           ],

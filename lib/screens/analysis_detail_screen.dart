@@ -5,29 +5,77 @@ import '../models/mood_analysis.dart';
 import '../models/mood_entry.dart';
 import '../main.dart'; // AppColors
 import 'chat_screen.dart';
+import '../Services/api_service.dart';
 
-class AnalysisDetailScreen extends StatelessWidget {
-  final String currentRange;
-  final MoodAnalysis? analysis;
+class AnalysisDetailScreen extends StatefulWidget {
+  final String initialRange;
+  final MoodAnalysis? initialAnalysis;
 
   const AnalysisDetailScreen({
     super.key,
-    required this.currentRange,
-    required this.analysis,
+    required this.initialRange,
+    required this.initialAnalysis,
   });
 
+  @override
+  State<AnalysisDetailScreen> createState() => _AnalysisDetailScreenState();
+}
+
+class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
+  late String _currentRange;
+  MoodAnalysis? _analysis;
+  bool _isLoading = false;
+
+  final List<String> _ranges = ['Dzień', 'Tydzień', 'Miesiąc', 'Rok'];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentRange = widget.initialRange;
+    _analysis = widget.initialAnalysis;
+  }
+
+  void _changeRange(int direction) async {
+    int currentIndex = _ranges.indexOf(_currentRange);
+    int newIndex = currentIndex + direction;
+
+    if (newIndex >= 0 && newIndex < _ranges.length) {
+      setState(() {
+        _currentRange = _ranges[newIndex];
+        _isLoading = true;
+      });
+
+      try {
+        final result = await ApiService().getMoodAnalysis(_currentRange);
+        if (mounted) {
+          setState(() {
+            _analysis = result;
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            // Opcjonalnie: obsługa błędu
+          });
+        }
+      }
+    }
+  }
+
   void _openChatAboutResults(BuildContext context) {
-    if (analysis == null) return;
+    if (_analysis == null) return;
 
     final dummyEntry = MoodEntry(
       date: DateTime.now(),
       text:
-          "Kontekst: Użytkownik chce porozmawiać o swojej analizie nastroju ($currentRange).",
-      moodRating: analysis!.averageMood,
+          "Kontekst: Użytkownik chce porozmawiać o swojej analizie nastroju ($_currentRange).",
+      moodRating: _analysis!.averageMood,
       category: "Analiza",
-      aiAnalysis: analysis!.aiSuggestion,
+      aiAnalysis: _analysis!.aiSuggestion,
       conversation:
-          "AI: Cześć! Widzę Twoją analizę. ${analysis!.aiSuggestion}. O czym chcesz porozmawiać?|",
+          "AI: Cześć! Widzę Twoją analizę. ${_analysis!.aiSuggestion}. O czym chcesz porozmawiać?|",
       imagePaths: [],
     );
 
@@ -74,19 +122,49 @@ class AnalysisDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "Aktywność ($currentRange)",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: textColor.withOpacity(0.7),
-              ),
+            // NAGŁÓWEK Z NAWIGACJĄ ( STRZAŁKI )
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  onPressed: _ranges.indexOf(_currentRange) > 0
+                      ? () => _changeRange(-1)
+                      : null,
+                  icon: Icon(
+                    Icons.chevron_left,
+                    color: _ranges.indexOf(_currentRange) > 0
+                        ? textColor
+                        : Colors.grey.withOpacity(0.3),
+                    size: 32,
+                  ),
+                ),
+                Text(
+                  "Aktywność ($_currentRange)",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+                IconButton(
+                  onPressed: _ranges.indexOf(_currentRange) < _ranges.length - 1
+                      ? () => _changeRange(1)
+                      : null,
+                  icon: Icon(
+                    Icons.chevron_right,
+                    color: _ranges.indexOf(_currentRange) < _ranges.length - 1
+                        ? textColor
+                        : Colors.grey.withOpacity(0.3),
+                    size: 32,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
 
             // --- WYKRES ---
             Container(
-              height: 240,
+              height: 280, // Zwiększono wysokość na legendę
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -99,7 +177,24 @@ class AnalysisDetailScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              child: _buildBarChart(isDark, textColor),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // LEGENDA / PODPIS OSI Y
+                        Text(
+                          "Liczba wpisów",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: textColor.withOpacity(0.5),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Expanded(child: _buildBarChart(isDark, textColor)),
+                      ],
+                    ),
             ),
 
             const SizedBox(height: 30),
@@ -133,83 +228,85 @@ class AnalysisDetailScreen extends StatelessWidget {
                   color: AppColors.primaryBlue.withOpacity(0.1),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryBlue.withOpacity(0.1),
-                          shape: BoxShape.circle,
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryBlue.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.auto_awesome,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              "Wnioski AI",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ),
+                          ],
                         ),
-                        child: const Icon(
-                          Icons.auto_awesome,
-                          color: AppColors.primaryBlue,
+                        const SizedBox(height: 16),
+                        Text(
+                          _analysis?.aiSuggestion ?? "Brak danych do analizy.",
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.5,
+                            color: textColor.withOpacity(0.9),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        "Wnioski AI",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: AppColors.primaryBlue,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    analysis?.aiSuggestion ?? "Brak danych do analizy.",
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.5,
-                      color: textColor.withOpacity(0.9),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                  Bounceable(
-                    onTap: () => _openChatAboutResults(context),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryBlue,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primaryBlue.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      alignment: Alignment.center,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(
-                            Icons.chat_bubble_outline,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            "Porozmawiaj o wynikach",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+                        Bounceable(
+                          onTap: () => _openChatAboutResults(context),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlue,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primaryBlue.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(
+                                  Icons.chat_bubble_outline,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  "Porozmawiaj o wynikach",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
 
             const SizedBox(height: 30),
@@ -224,9 +321,11 @@ class AnalysisDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            if (analysis != null && analysis!.moodStats.isNotEmpty)
-              ...analysis!.moodStats.entries.map((entry) {
-                final percent = (entry.value / analysis!.entryCount);
+            if (!_isLoading &&
+                _analysis != null &&
+                _analysis!.moodStats.isNotEmpty)
+              ..._analysis!.moodStats.entries.map((entry) {
+                final percent = (entry.value / _analysis!.entryCount);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12.0),
                   child: _buildMoodStatRow(
@@ -238,7 +337,7 @@ class AnalysisDetailScreen extends StatelessWidget {
                   ),
                 );
               })
-            else
+            else if (!_isLoading)
               const Padding(
                 padding: EdgeInsets.all(8.0),
                 child: Text("Brak danych."),
@@ -252,14 +351,14 @@ class AnalysisDetailScreen extends StatelessWidget {
   }
 
   Widget _buildBarChart(bool isDark, Color textColor) {
-    if (analysis == null || analysis!.dailyCounts.isEmpty) {
+    if (_analysis == null || _analysis!.dailyCounts.isEmpty) {
       return const Center(child: Text("Brak danych"));
     }
 
-    final sortedKeys = analysis!.dailyCounts.keys.toList()..sort();
+    final sortedKeys = _analysis!.dailyCounts.keys.toList()..sort();
 
     int maxCount = 0;
-    for (var count in analysis!.dailyCounts.values) {
+    for (var count in _analysis!.dailyCounts.values) {
       if (count > maxCount) maxCount = count;
     }
     if (maxCount == 0) maxCount = 1;
@@ -276,18 +375,17 @@ class AnalysisDetailScreen extends StatelessWidget {
             child: Row(
               mainAxisAlignment:
                   (sortedKeys.length * barColumnWidth < constraints.maxWidth)
-                  ? MainAxisAlignment.spaceEvenly
-                  : MainAxisAlignment.start,
+                      ? MainAxisAlignment.spaceEvenly
+                      : MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: sortedKeys.map((dateStr) {
-                final count = analysis!.dailyCounts[dateStr]!;
+                final count = _analysis!.dailyCounts[dateStr]!;
                 final heightFactor = count / maxCount;
                 final date = DateTime.parse(dateStr);
                 final dayName = DateFormat('E', 'pl_PL').format(date);
                 final dayNum = DateFormat('d').format(date);
 
-                // POPRAWKA: Zwiększono margines bezpieczeństwa na teksty do 70px (było 60px)
-                // Teraz mamy pewność, że napisy się zmieszczą.
+                // POPRAWKA: Zwiększono margines bezpieczeństwa na teksty do 70px
                 final double availableHeight = constraints.maxHeight - 70;
                 final double barHeight = availableHeight * heightFactor;
 
@@ -326,16 +424,14 @@ class AnalysisDetailScreen extends StatelessWidget {
                           color: count > 0
                               ? AppColors.primaryBlue
                               : (isDark
-                                    ? Colors.white10
-                                    : Colors.grey.shade200),
+                                  ? Colors.white10
+                                  : Colors.grey.shade200),
                           borderRadius: BorderRadius.circular(6),
                         ),
                       ),
 
                       const SizedBox(height: 8),
 
-                      // POPRAWKA: Zwiększono wysokość kontenera na datę z 30 do 38px
-                      // Dodano FittedBox, aby tekst się skalował zamiast wychodzić.
                       SizedBox(
                         height: 38,
                         child: Column(

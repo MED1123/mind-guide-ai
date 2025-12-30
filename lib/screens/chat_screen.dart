@@ -16,48 +16,69 @@ import '../widgets/animated_button.dart';
 class SlidableMessage extends StatefulWidget {
   final Widget child;
   final DateTime? time;
+  final bool isUser;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
-  const SlidableMessage({super.key, required this.child, this.time});
+  const SlidableMessage({
+    super.key,
+    required this.child,
+    this.time,
+    required this.isUser,
+    this.onTap,
+    this.onLongPress,
+  });
 
   @override
   State<SlidableMessage> createState() => _SlidableMessageState();
 }
 
 class _SlidableMessageState extends State<SlidableMessage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   double _dragOffset = 0.0;
-  late AnimationController _controller;
-  late Animation<double> _animation;
+  late AnimationController _slideController;
+  late Animation<double> _slideAnimation;
 
-  // Maksymalne przesunięcie
-  final double _maxDrag = -80.0;
+  late AnimationController _scaleController;
+  late Animation<double> _scaleAnimation;
+
+  final double _maxDrag = 80.0;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _controller.addListener(() {
+    _slideController.addListener(() {
       setState(() {
-        _dragOffset = _animation.value;
+        _dragOffset = _slideAnimation.value;
       });
     });
+
+    _scaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeInOut),
+    );
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _slideController.dispose();
+    _scaleController.dispose();
     super.dispose();
   }
 
   void _runResetAnimation() {
-    _animation = Tween<double>(
+    _slideAnimation = Tween<double>(
       begin: _dragOffset,
       end: 0.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
-    _controller.forward(from: 0.0);
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOutBack));
+    _slideController.forward(from: 0.0);
   }
 
   @override
@@ -68,32 +89,79 @@ class _SlidableMessageState extends State<SlidableMessage>
 
     return GestureDetector(
       onHorizontalDragUpdate: (details) {
-        if (_controller.isAnimating) _controller.stop();
-        if (details.delta.dx < 0 || _dragOffset < 0) {
-          setState(() {
-            _dragOffset += details.delta.dx;
-            if (_dragOffset < _maxDrag) {
-              _dragOffset = _maxDrag + (details.delta.dx * 0.1);
-            }
-            if (_dragOffset > 0) _dragOffset = 0;
-          });
+        if (_slideController.isAnimating) _slideController.stop();
+        
+        double delta = details.delta.dx;
+        
+        if (widget.isUser) {
+           if (delta < 0 || _dragOffset < 0) {
+             setState(() {
+               _dragOffset += delta;
+               if (_dragOffset < -_maxDrag) {
+                 _dragOffset = -_maxDrag + (delta * 0.1);
+               }
+               if (_dragOffset > 0) _dragOffset = 0;
+             });
+           }
+        } 
+        else {
+           if (delta > 0 || _dragOffset > 0) {
+             setState(() {
+               _dragOffset += delta;
+               if (_dragOffset > _maxDrag) {
+                  _dragOffset = _maxDrag + (delta * 0.1);
+               }
+               if (_dragOffset < 0) _dragOffset = 0;
+             });
+           }
         }
       },
       onHorizontalDragEnd: (details) {
         _runResetAnimation();
       },
+      onTapDown: (_) => _scaleController.forward(),
+      onTapUp: (_) => _scaleController.reverse(),
+      onTapCancel: () => _scaleController.reverse(),
+      onTap: widget.onTap,
+      onLongPress: () async {
+        await _scaleController.forward();
+        await Future.delayed(const Duration(milliseconds: 100));
+        await _scaleController.reverse();
+        widget.onLongPress?.call();
+      },
       child: Stack(
-        alignment: Alignment.centerRight,
+        alignment: widget.isUser ? Alignment.centerRight : Alignment.centerLeft,
         children: [
-          if (_dragOffset < -5)
+          if (widget.isUser && _dragOffset < -5)
             Positioned(
               top: 0,
               bottom: 0,
               right: 0,
-              width: _dragOffset.abs(),
+              width: _maxDrag,
               child: Center(
                 child: Opacity(
-                  opacity: (-_dragOffset / 60).clamp(0.0, 1.0),
+                  opacity: (-_dragOffset / 40.0).clamp(0.0, 1.0),
+                  child: Text(
+                    timeStr,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            
+          if (!widget.isUser && _dragOffset > 5)
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: _maxDrag,
+              child: Center(
+                child: Opacity(
+                  opacity: (_dragOffset / 40.0).clamp(0.0, 1.0),
                   child: Text(
                     timeStr,
                     style: TextStyle(
@@ -108,7 +176,10 @@ class _SlidableMessageState extends State<SlidableMessage>
 
           Transform.translate(
             offset: Offset(_dragOffset, 0),
-            child: widget.child,
+            child: ScaleTransition(
+              scale: _scaleAnimation,
+              child: widget.child,
+            ),
           ),
         ],
       ),
@@ -354,6 +425,108 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  void _showMessageOptions(int index) {
+    final msg = _messages[index];
+    if (!msg['role'].startsWith('user')) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (msg['role'] == 'user')
+              ListTile(
+                leading: const Icon(Icons.edit, color: AppColors.primaryBlue),
+                title: const Text("Edytuj wiadomość"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _editMessageDialog(index);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text("Usuń wiadomość", style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _deleteMessage(index);
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _editMessageDialog(int index) {
+    final msg = _messages[index];
+    final TextEditingController editController =
+        TextEditingController(text: msg['text']);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Edytuj wiadomość"),
+        content: TextField(
+          controller: editController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: "Wpisz treść...",
+          ),
+          minLines: 1,
+          maxLines: 5,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Anuluj"),
+          ),
+          TextButton(
+            onPressed: () {
+              if (editController.text.trim().isNotEmpty) {
+                setState(() {
+                  _messages[index]['text'] = editController.text.trim();
+                });
+                _saveConversation();
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text("Zapisz"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessage(int index) {
+    setState(() {
+      _messages.removeAt(index);
+    });
+    _saveConversation();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Wiadomość usunięta"),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   // --- LOGIKA CZATU ---
   void _loadMessagesFromEntry() {
     _messages.clear();
@@ -477,7 +650,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _ttsService.stop();
     HapticFeedback.lightImpact();
 
-    final userText = _inputController.text;
+    final userText = _inputController.text.trim();
     List<String> imagesToSend = List.from(_tempChatImages);
     final now = DateTime.now();
 
@@ -1007,14 +1180,20 @@ class _ChatScreenState extends State<ChatScreen> {
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
                       child: SlidableMessage(
+                        isUser: isUser,
                         time: msg['time'] as DateTime?,
-                        child: GestureDetector(
-                          onTap: () {
-                            if (msg['role'] == 'user_image') {
-                              _showFullImage(msg['path']!);
-                            }
-                          },
-                          child: Container(
+                        onLongPress: () {
+                          if (isUser) {
+                            HapticFeedback.mediumImpact();
+                            _showMessageOptions(index);
+                          }
+                        },
+                        onTap: () {
+                          if (msg['role'] == 'user_image') {
+                            _showFullImage(msg['path']!);
+                          }
+                        },
+                        child: Container(
                             margin: const EdgeInsets.only(bottom: 16),
                             padding: msg['role'] == 'user_image'
                                 ? const EdgeInsets.all(4)
@@ -1066,8 +1245,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                         ),
-                      ),
-                    );
+                      );
                   },
                 ),
               ),
@@ -1306,3 +1484,5 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 }
+
+
