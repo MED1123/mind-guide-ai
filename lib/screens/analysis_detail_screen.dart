@@ -6,6 +6,7 @@ import '../models/mood_entry.dart';
 import '../main.dart'; // AppColors
 import 'chat_screen.dart';
 import '../Services/api_service.dart';
+import '../Services/translation_service.dart'; // Import
 
 class AnalysisDetailScreen extends StatefulWidget {
   final String initialRange;
@@ -46,7 +47,10 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
       });
 
       try {
-        final result = await ApiService().getMoodAnalysis(_currentRange);
+        final result = await ApiService().getMoodAnalysis(
+          _currentRange,
+          appSettings.locale.languageCode,
+        );
         if (mounted) {
           setState(() {
             _analysis = result;
@@ -109,7 +113,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          "Analiza nastroju",
+          TranslationService.tr('analysis_title'),
           style: TextStyle(
             color: textColor,
             fontWeight: FontWeight.bold,
@@ -139,7 +143,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                   ),
                 ),
                 Text(
-                  "Aktywność ($_currentRange)",
+                  "${TranslationService.tr('activity')} (${TranslationService.tr(_currentRange)})",
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -184,7 +188,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                       children: [
                         // LEGENDA / PODPIS OSI Y
                         Text(
-                          "Liczba wpisów",
+                          TranslationService.tr('number_of_entries'),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -201,7 +205,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
 
             // --- KARTA ASYSTENTA ---
             Text(
-              "Opinia Asystenta",
+              TranslationService.tr('assistant_opinion'),
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -247,8 +251,8 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            const Text(
-                              "Wnioski AI",
+                            Text(
+                              TranslationService.tr('ai_conclusion'),
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -259,7 +263,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          _analysis?.aiSuggestion ?? "Brak danych do analizy.",
+                          _analysis?.aiSuggestion ?? TranslationService.tr('no_data_analysis'),
                           style: TextStyle(
                             fontSize: 15,
                             height: 1.5,
@@ -287,7 +291,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                             alignment: Alignment.center,
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
+                              children: [
                                 Icon(
                                   Icons.chat_bubble_outline,
                                   color: Colors.white,
@@ -295,7 +299,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  "Porozmawiaj o wynikach",
+                                  TranslationService.tr('talk_results'),
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -313,7 +317,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
 
             // --- DOMINUJĄCE NASTROJE ---
             Text(
-              "Dominujące nastroje",
+              TranslationService.tr('dominant_moods'),
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -338,9 +342,9 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                 );
               })
             else if (!_isLoading)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(8.0),
-                child: Text("Brak danych."),
+                child: Text(TranslationService.tr('no_data')),
               ),
 
             const SizedBox(height: 40),
@@ -352,7 +356,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
 
   Widget _buildBarChart(bool isDark, Color textColor) {
     if (_analysis == null || _analysis!.dailyCounts.isEmpty) {
-      return const Center(child: Text("Brak danych"));
+      return Center(child: Text(TranslationService.tr('no_data')));
     }
 
     final sortedKeys = _analysis!.dailyCounts.keys.toList()..sort();
@@ -382,7 +386,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
                 final count = _analysis!.dailyCounts[dateStr]!;
                 final heightFactor = count / maxCount;
                 final date = DateTime.parse(dateStr);
-                final dayName = DateFormat('E', 'pl_PL').format(date);
+                final dayName = DateFormat('E', appSettings.locale.toLanguageTag()).format(date);
                 final dayNum = DateFormat('d').format(date);
 
                 // POPRAWKA: Zwiększono margines bezpieczeństwa na teksty do 70px
@@ -490,7 +494,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
         children: [
           Expanded(
             child: Text(
-              mood,
+              TranslationService.tr(mood),
               style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
               overflow: TextOverflow.ellipsis,
             ),

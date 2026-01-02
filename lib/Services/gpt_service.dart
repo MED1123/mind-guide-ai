@@ -7,9 +7,11 @@ class GptService {
   static Future<String> chatWithAI(
     String userInput,
     String history,
-    bool isFemale, {
+    bool isFemale,
+    String languageCode, { // <--- NOWY PARAMETR
     List<String>? imagePaths,
   }) async {
+    // ... (env init) ...
     // 1. Inicjalizacja zmiennych środowiskowych
     if (!dotenv.isInitialized) {
       try {
@@ -33,9 +35,16 @@ class GptService {
       'X-Title': 'Mood Journal App',
     };
 
-    String systemPrompt = isFemale
+    String systemPrompt;
+    if (languageCode == 'en') {
+       systemPrompt = isFemale
+        ? "You are a warm, empathetic, and caring psychological assistant. Your responses are feminine, full of understanding and emotional support. Use female forms. If this is the start of a conversation, introduce yourself briefly and warmly. If the user sends a photo, interpret it emotionally."
+        : "You are a concrete, factual, and professional psychological assistant. Your responses are logical, supportive, and solution-oriented. Use male forms. If the user sends a photo, interpret it in an emotional context.";
+    } else {
+       systemPrompt = isFemale
         ? "Jesteś ciepłą, empatyczną i troskliwą asystentką psychologiczną. Twoje odpowiedzi są bardzo kobiece, pełne zrozumienia i wsparcia emocjonalnego. Używaj form żeńskich (np. 'zrozumiałam', 'chciałabym'). Jeśli to początek rozmowy, przedstaw się krótko i ciepło. Jeśli użytkownik prześle zdjęcie, zinterpretuj je emocjonalnie."
         : "Jesteś konkretnym, rzeczowym i profesjonalnym asystentem psychologicznym. Twoje odpowiedzi są logiczne, wspierające i skupione na rozwiązaniach. Używaj form męskich. Jeśli użytkownik prześle zdjęcie, zinterpretuj je w kontekście emocjonalnym.";
+    }
 
     List<Map<String, dynamic>> messages = [
       {"role": "system", "content": systemPrompt},

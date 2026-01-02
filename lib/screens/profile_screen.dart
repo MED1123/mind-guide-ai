@@ -7,7 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import '../Services/api_service.dart';
 import '../models/mood_analysis.dart';
 import '../main.dart'; // AppColors, AppSettings
+import '../Services/translation_service.dart'; // Import
 import 'analysis_detail_screen.dart'; // Import
+import 'sobriety_screen.dart'; // Import
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -22,7 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoadingAnalysis = false;
   bool _isLoadingProfile = false;
 
-  String _displayName = "Użytkownik";
+  String _displayName = TranslationService.tr('user_default');
   String _displayUsername = "";
   String _profileImagePath = "";
 
@@ -54,10 +56,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final username = profileData['username'] ?? "";
 
       if (mounted) {
+        // Ustawiamy tryb ciemny, jeśli przyjdzie z API
+        if (profileData['is_dark_mode'] == true) {
+          appSettings.toggleTheme(true);
+        } else {
+          appSettings.toggleTheme(false);
+        }
+
         setState(() {
           _displayName = (name.isNotEmpty || surname.isNotEmpty)
               ? "$name $surname"
-              : "Użytkownik";
+              : (username.isNotEmpty ? username : TranslationService.tr('user_default'));
           _displayUsername = username;
           _profileImagePath = profileData['profile_image_path'] ?? "";
 
@@ -73,7 +82,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) setState(() => _isLoadingProfile = false);
     }
 
-    final analysisResult = await ApiService().getMoodAnalysis('Tydzień');
+    final analysisResult = await ApiService()
+        .getMoodAnalysis('Tydzień', appSettings.locale.languageCode);
     if (mounted) {
       setState(() {
         _analysis = analysisResult;
@@ -93,12 +103,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await ApiService().updateUserProfile(profileImagePath: image.path);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Zdjęcie profilowe zaktualizowane")),
+            SnackBar(content: Text(TranslationService.tr('profile_updated'))),
           );
         }
       }
     } catch (e) {
-      print("Błąd wyboru zdjęcia: $e");
+      print("${TranslationService.tr('photo_error')}: $e");
     }
   }
 
@@ -142,7 +152,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               CupertinoButton(
-                child: const Text('Zatwierdź'),
+                child: Text(TranslationService.tr('submit')),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -194,9 +204,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
     final textColor = isDark ? Colors.white : const Color(0xFF1E1E1E);
 
-    String greetingText = "Witaj 👋";
+    String greetingText = "${TranslationService.tr('hello')} 👋";
     if (_displayUsername.isNotEmpty) {
-      greetingText = "Witaj, $_displayUsername 👋";
+      greetingText = "${TranslationService.tr('hello')}, $_displayUsername 👋";
     }
 
     return Scaffold(
@@ -241,7 +251,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 30),
 
               Text(
-                "Twoje Centrum",
+                TranslationService.tr('your_center'),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -255,8 +265,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Expanded(
                     child: _buildGridCard(
                       isDark: isDark,
-                      title: "Analiza AI",
-                      subtitle: "Twoje emocje",
+                      title: TranslationService.tr('ai_analysis'),
+                      subtitle: TranslationService.tr('your_emotions'),
                       icon: Icons.auto_awesome,
                       iconColor: AppColors.primaryBlue,
                       onTap: _openAnalysisDetail,
@@ -266,15 +276,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Expanded(
                     child: _buildGridCard(
                       isDark: isDark,
-                      title: "Sobriety",
-                      subtitle: "Liczniki",
+                      title: TranslationService.tr('sobriety'),
+                      subtitle: TranslationService.tr('counters'),
                       icon: Icons.access_time_filled,
                       iconColor: Colors.teal,
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Moduł Sobriety w budowie..."),
-                          ),
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SobrietyScreen()),
                         );
                       },
                     ),
@@ -318,7 +327,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Czas w aplikacji",
+                          TranslationService.tr('time_in_app'),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -327,7 +336,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "0 sesji dzisiaj",
+                          TranslationService.tr('sessions_today'),
                           style: TextStyle(
                             color: Colors.grey.shade500,
                             fontSize: 14,
@@ -363,8 +372,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       const Icon(Icons.logout, color: Colors.red),
                       const SizedBox(width: 10),
-                      const Text(
-                        "Wyloguj się",
+                      Text(
+                        TranslationService.tr('logout'),
                         style: TextStyle(
                           color: Colors.red,
                           fontWeight: FontWeight.bold,
@@ -472,7 +481,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 GestureDetector(
                   onTap: _showEditProfileSheet,
                   child: Text(
-                    "Ustawienia profilu >",
+                    "${TranslationService.tr('settings')} >",
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -557,9 +566,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) {
+      builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (sheetContext, setModalState) {
             // ODŚWIEŻAMY STAN MOTYWU Z appSettings
             final isCurrentDark = appSettings.isDarkMode;
 
@@ -569,7 +578,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final sheetTextColor = isCurrentDark ? Colors.white : Colors.black87;
 
             return Container(
-              height: MediaQuery.of(context).size.height * 0.6,
+              height: MediaQuery.of(sheetContext).size.height * 0.6,
               decoration: BoxDecoration(
                 color: sheetBgColor,
                 borderRadius: const BorderRadius.vertical(
@@ -591,7 +600,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   SwitchListTile(
                     title: Text(
-                      "Tryb ciemny",
+                      TranslationService.tr('dark_mode'),
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: sheetTextColor,
@@ -611,11 +620,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: isCurrentDark ? Colors.white : Colors.indigo,
                       ),
                     ),
-                    onChanged: (bool value) {
+                    onChanged: (bool value) async {
                       appSettings.toggleTheme(value);
                       setModalState(() {});
                       // Odświeżamy też ekran pod spodem
                       setState(() {});
+                      
+                      // Wysyłamy do API
+                      await ApiService().updateUserProfile(isDarkMode: value);
                     },
                   ),
 
@@ -623,26 +635,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   _buildSettingsItem(
                     icon: Icons.lock_outline,
-                    title: "Zmień hasło",
+                    title: TranslationService.tr('change_password'),
                     onTap: () {},
                     isDark: isCurrentDark,
                   ),
                   _buildSettingsItem(
                     icon: Icons.language,
-                    title: "Zmień język",
-                    trailing: const Text("🇵🇱"),
-                    onTap: () {},
+                    title: TranslationService.tr('change_language'),
+                    trailing: Text(
+                      appSettings.locale.languageCode == 'pl' ? "🇵🇱" : "🇬🇧",
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                    onTap: () {
+                      final newLocale = appSettings.locale.languageCode == 'pl'
+                          ? const Locale('en')
+                          : const Locale('pl');
+                      appSettings.changeLocale(newLocale);
+                      setModalState(() {}); // Odśwież modal
+                      setState(() {});      // Odśwież ekran w tle
+                    },
                     isDark: isCurrentDark,
                   ),
                   _buildSettingsItem(
                     icon: Icons.privacy_tip_outlined,
-                    title: "Polityka prywatności",
+                    title: TranslationService.tr('privacy_policy'),
                     onTap: () {},
                     isDark: isCurrentDark,
                   ),
                   _buildSettingsItem(
                     icon: Icons.help_outline,
-                    title: "Pomoc / Kontakt",
+                    title: TranslationService.tr('help_contact'),
                     onTap: () {},
                     isDark: isCurrentDark,
                   ),
@@ -651,13 +673,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   _buildSettingsItem(
                     icon: Icons.delete_outline,
-                    title: "Usuń konto",
+                    title: TranslationService.tr('delete_account'),
                     textColor: Colors.red,
                     iconColor: Colors.red,
                     onTap: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Funkcja w budowie")),
+                      Navigator.pop(sheetContext); // Close using sheet context
+                      showDialog(
+                        context: context, // Use ProfileScreen context (this.context)
+                        builder: (ctx) => AlertDialog(
+                          title: Text(TranslationService.tr('delete_account')),
+                          content: Text(TranslationService.tr('delete_account_confirm')),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: Text(TranslationService.tr('cancel')),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.pop(ctx); // Close dialog
+                                final success = await ApiService().deleteUserAccount();
+                                if (success) {
+                                  if (mounted) {
+                                    // Use mounted check on State, and context of State
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(TranslationService.tr('account_deleted'))),
+                                    );
+                                    ApiService().currentUserId = null;
+                                    Navigator.of(context).pushAndRemoveUntil(
+                                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                      (route) => false,
+                                    );
+                                  }
+                                }
+                              },
+                              style: TextButton.styleFrom(foregroundColor: Colors.red),
+                              child: Text(TranslationService.tr('delete')),
+                            ),
+                          ],
+                        ),
                       );
                     },
                     isDark: isCurrentDark,
@@ -734,7 +787,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "Edytuj Dane",
+                TranslationService.tr('edit_data'),
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -743,21 +796,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 20),
               _buildTextField(
-                "Imię",
+                TranslationService.tr('name'),
                 _nameController,
                 isDark,
                 Icons.person_outline,
               ),
               const SizedBox(height: 12),
               _buildTextField(
-                "Nazwisko",
+                TranslationService.tr('surname'),
                 _surnameController,
                 isDark,
                 Icons.person_outline,
               ),
               const SizedBox(height: 12),
               _buildTextField(
-                "Nazwa użytkownika",
+                TranslationService.tr('username'),
                 _usernameController,
                 isDark,
                 Icons.alternate_email,
@@ -768,7 +821,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: _pickDate,
                 child: AbsorbPointer(
                   child: _buildTextField(
-                    "Data urodzenia",
+                    TranslationService.tr('birth_date'),
                     _dobController,
                     isDark,
                     Icons.cake_outlined,
@@ -778,7 +831,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               const SizedBox(height: 12),
               _buildTextField(
-                "Email",
+                TranslationService.tr('email'),
                 _emailController,
                 isDark,
                 Icons.email_outlined,
@@ -819,8 +872,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
-                    "Zapisz zmiany",
+                  child: Text(
+                    TranslationService.tr('save_changes'),
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

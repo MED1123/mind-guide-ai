@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../Services/database_service.dart';
 import '../Services/gpt_service.dart';
 import '../Services/tts_service.dart';
+import '../Services/translation_service.dart'; // Import
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/animated_button.dart';
@@ -262,8 +263,8 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          "Wybierz osobowość",
+        title: Text(
+          TranslationService.tr('choose_personality'),
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
@@ -275,11 +276,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 backgroundColor: Colors.blueAccent,
                 child: Icon(Icons.face, color: Colors.white),
               ),
-              title: const Text(
-                "Asystent",
+              title: Text(
+                TranslationService.tr('assistant'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: const Text("Głos męski"),
+              subtitle: Text(TranslationService.tr('male_voice')),
               trailing: !appSettings.isAiFemale
                   ? const Icon(Icons.check_circle, color: AppColors.primaryBlue)
                   : null,
@@ -296,11 +297,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 backgroundColor: Colors.pinkAccent,
                 child: Icon(Icons.face_3, color: Colors.white),
               ),
-              title: const Text(
-                "Asystentka",
+              title: Text(
+                TranslationService.tr('assistant_female'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: const Text("Głos żeński"),
+              subtitle: Text(TranslationService.tr('female_voice')),
               trailing: appSettings.isAiFemale
                   ? const Icon(Icons.check_circle, color: Colors.pinkAccent)
                   : null,
@@ -452,7 +453,7 @@ class _ChatScreenState extends State<ChatScreen> {
             if (msg['role'] == 'user')
               ListTile(
                 leading: const Icon(Icons.edit, color: AppColors.primaryBlue),
-                title: const Text("Edytuj wiadomość"),
+                title: Text(TranslationService.tr('edit_message')),
                 onTap: () {
                   Navigator.pop(ctx);
                   _editMessageDialog(index);
@@ -460,7 +461,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text("Usuń wiadomość", style: TextStyle(color: Colors.red)),
+              title: Text(TranslationService.tr('delete_message'), style: TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(ctx);
                 _deleteMessage(index);
@@ -481,7 +482,7 @@ class _ChatScreenState extends State<ChatScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Edytuj wiadomość"),
+        title: Text(TranslationService.tr('edit_message')),
         content: TextField(
           controller: editController,
           autofocus: true,
@@ -494,7 +495,7 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Anuluj"),
+            child: Text(TranslationService.tr('cancel')),
           ),
           TextButton(
             onPressed: () {
@@ -506,7 +507,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text("Zapisz"),
+            child: Text(TranslationService.tr('save')),
           ),
         ],
       ),
@@ -616,6 +617,7 @@ class _ChatScreenState extends State<ChatScreen> {
         userInputText,
         historyStr,
         appSettings.isAiFemale,
+        appSettings.locale.languageCode, // <--- New Param
         imagePaths: imagesToSend,
       );
 
@@ -695,6 +697,7 @@ class _ChatScreenState extends State<ChatScreen> {
         prompt,
         history,
         appSettings.isAiFemale,
+        appSettings.locale.languageCode, // <--- New Param
         imagePaths: _currentEntry.imagePaths,
       );
 
@@ -768,8 +771,8 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          "Zarządzanie rozmową",
+        title: Text(
+          TranslationService.tr('manage_chat'),
           textAlign: TextAlign.center,
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
@@ -794,8 +797,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   Navigator.pop(ctx);
                   _clearConversationOnly();
                 },
-                child: const Text(
-                  "Wyczyść rozmowę",
+                child: Text(
+                  TranslationService.tr('clear_chat'),
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -1003,7 +1006,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                             child: Text(
-                              "Wielkość czcionki",
+                              TranslationService.tr('font_size'),
                               // ZMIANA: Mniejsza czcionka
                               style: TextStyle(
                                 fontSize: 15,
@@ -1021,19 +1024,19 @@ class _ChatScreenState extends State<ChatScreen> {
                             child: Row(
                               children: [
                                 _buildFontSizeOption(
-                                  "Mała",
+                                  TranslationService.tr('small'),
                                   12.0,
                                   () => appSettings.setFontSizeSmall(),
                                 ),
                                 const SizedBox(width: 10),
                                 _buildFontSizeOption(
-                                  "Średnia",
+                                  TranslationService.tr('medium'),
                                   14.0,
                                   () => appSettings.setFontSizeMedium(),
                                 ),
                                 const SizedBox(width: 10),
                                 _buildFontSizeOption(
-                                  "Duża",
+                                  TranslationService.tr('large'),
                                   16.0,
                                   () => appSettings.setFontSizeLarge(),
                                 ),
@@ -1047,8 +1050,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               color: AppColors.primaryBlue,
                             ),
                             // ZMIANA: Zmiana tekstu na krótszy, mniejsza czcionka, jedna linia
-                            title: const Text(
-                              "Opcje rozmowy",
+                            title: Text(
+                              TranslationService.tr('chat_options'),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -1398,7 +1401,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 textCapitalization:
                                     TextCapitalization.sentences,
                                 decoration: InputDecoration(
-                                  hintText: "Napisz wiadomość...",
+                                  hintText: TranslationService.tr('type_message'),
                                   hintStyle: TextStyle(
                                     color: inputIconColor,
                                     fontSize: 13,

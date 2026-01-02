@@ -9,6 +9,7 @@ import '../Services/api_service.dart'; // Import serwisu API
 import '../models/mood_entry.dart';
 import '../main.dart';
 import '../widgets/mood_card.dart';
+import '../Services/translation_service.dart';
 import 'dart:math';
 
 class HomeScreenUI extends StatefulWidget {
@@ -130,7 +131,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Brak dostępu do galerii.")),
+           SnackBar(content: Text(TranslationService.tr('gallery_error'))),
         );
       }
     }
@@ -187,7 +188,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     final currentUserId = ApiService().currentUserId;
     if (currentUserId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Błąd: Użytkownik nie jest zalogowany")),
+         SnackBar(content: Text(TranslationService.tr('login_needed'))),
       );
       return;
     }
@@ -253,7 +254,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     if (mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Zapisano wpis!")));
+      ).showSnackBar(SnackBar(content: Text(TranslationService.tr('entry_saved'))));
     }
 
     if (widget.onPostCreated != null) {
@@ -277,15 +278,15 @@ class HomeScreenUIState extends State<HomeScreenUI> {
     final userId = ApiService().currentUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Błąd: Zaloguj się najpierw!")),
+         SnackBar(content: Text(TranslationService.tr('login_needed'))),
       );
       return;
     }
 
     HapticFeedback.mediumImpact();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Generowanie historii... to potrwa chwilę."),
+      SnackBar(
+        content: Text(TranslationService.tr('generating')),
       ),
     );
 
@@ -346,14 +347,14 @@ class HomeScreenUIState extends State<HomeScreenUI> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Gotowe! Sprawdź wykresy w Kalendarzu.")),
+         SnackBar(content: Text(TranslationService.tr('generated'))),
       );
       refreshEntries();
     }
   }
 
   String _getHintText() {
-    return _selectedSpecificMood == null ? "" : "Opisz dlaczego czujesz się $_selectedSpecificMood...";
+    return _selectedSpecificMood == null ? "" : "${TranslationService.tr('describe_why')} ${TranslationService.tr(_selectedSpecificMood!)}...";
   }
 
   @override
@@ -372,7 +373,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                 children: [
                   const SizedBox(height: 10),
                   Text(
-                    "Jak się dzisiaj czujesz?",
+                    TranslationService.tr('today_feeling'),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontSize: 32,
                           height: 1.2,
@@ -420,7 +421,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    catName,
+                                    TranslationService.tr(catName),
                                     style: TextStyle(
                                       color: isSelected
                                           ? color
@@ -448,7 +449,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                             children: [
                               const SizedBox(height: 24),
                               Text(
-                                "Doprecyzuj:",
+                                TranslationService.tr('refine'),
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -484,7 +485,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                         ),
                                       ),
                                       child: Text(
-                                        mood,
+                                        TranslationService.tr(mood),
                                         style: TextStyle(
                                           color: isSelected
                                               ? Colors.white
@@ -639,7 +640,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "Czy chcesz uruchomić asystenta AI?",
+                                    TranslationService.tr('activate_ai'),
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
@@ -654,7 +655,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                       Expanded(
                                         child: _buildChoiceBtn(
                                           context,
-                                          "Nie",
+                                          TranslationService.tr('no'),
                                           !_wantAI,
                                           () => setState(() => _wantAI = false),
                                         ),
@@ -663,7 +664,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                       Expanded(
                                         child: _buildChoiceBtn(
                                           context,
-                                          "Tak",
+                                          TranslationService.tr('yes'),
                                           _wantAI,
                                           () => setState(() => _wantAI = true),
                                         ),
@@ -673,7 +674,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                   if (_wantAI) ...[
                                     const SizedBox(height: 16),
                                     Text(
-                                      "Wybierz osobowość:",
+                                      TranslationService.tr('choose_personality'),
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
@@ -686,7 +687,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                         Expanded(
                                           child: _buildChoiceBtn(
                                             context,
-                                            "Głos Męski",
+                                            TranslationService.tr('male_voice'),
                                             !_tempIsAiFemale,
                                             () => setState(
                                               () => _tempIsAiFemale = false,
@@ -697,7 +698,7 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                         Expanded(
                                           child: _buildChoiceBtn(
                                             context,
-                                            "Głos Żeński",
+                                            TranslationService.tr('female_voice'),
                                             _tempIsAiFemale,
                                             () => setState(
                                               () => _tempIsAiFemale = true,
@@ -727,8 +728,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                     ],
                                   ),
                                   alignment: Alignment.center,
-                                  child: const Text(
-                                    "Zapisz wpis",
+                                  child: Text(
+                                    TranslationService.tr('save_entry'),
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
@@ -748,8 +749,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                     Icons.bug_report,
                                     color: Colors.orange,
                                   ),
-                                  label: const Text(
-                                    "Generuj przykładowe dane (Demo)",
+                                  label: Text(
+                                    TranslationService.tr('generate_demo'),
                                     style: TextStyle(
                                       color: Colors.orange,
                                       fontWeight: FontWeight.bold,
@@ -765,8 +766,8 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        "Twoje ostatnie wpisy",
+                      Text(
+                        TranslationService.tr('your_entries'),
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -783,45 +784,52 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                           child: Padding(
                             padding: const EdgeInsets.all(20.0),
                             child: Text(
-                              "Brak wpisów",
+                              TranslationService.tr('no_entries'),
                               style: TextStyle(color: Colors.grey.shade400),
                             ),
                           ),
                         );
                       }
-                      final displayEntries = snapshot.data!.take(4).toList();
-                      return ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: displayEntries.length,
-                        itemBuilder: (context, index) {
-                          final entry = displayEntries[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0),
-                            child: Bounceable(
-                              scaleFactor: 0.95,
-                              onTap: () {
-                                HapticFeedback.lightImpact();
-                                widget.onOpenChat(entry);
-                              },
-                              child: MoodCard(entry: entry),
+                      final allEntries = snapshot.data!;
+                      final displayEntries = allEntries.take(4).toList();
+                      
+                      return Column(
+                        children: [
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: displayEntries.length,
+                            itemBuilder: (context, index) {
+                              final entry = displayEntries[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: Bounceable(
+                                  scaleFactor: 0.95,
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    widget.onOpenChat(entry);
+                                  },
+                                  child: MoodCard(entry: entry),
+                                ),
+                              );
+                            },
+                          ),
+                          if (allEntries.length >= 4)
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: TextButton(
+                                  onPressed: widget.onGoToCalendar,
+                                  child: Text(
+                                    TranslationService.tr('see_all'),
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
                             ),
-                          );
-                        },
+                        ],
                       );
                     },
-                  ),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: TextButton(
-                        onPressed: widget.onGoToCalendar,
-                        child: const Text(
-                          "Zobacz wszystkie wpisy",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 20),
                 ],

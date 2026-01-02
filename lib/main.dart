@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:provider/provider.dart'; // Import provider
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
 
 import 'Services/database_service.dart';
 import 'Services/api_service.dart';
+import 'Services/translation_service.dart';
 import 'models/mood_entry.dart';
 import 'screens/calendar_screen.dart' show CalendarScreen, CalendarScreenState;
 import 'screens/home_screen.dart' show HomeScreenUI, HomeScreenUIState;
@@ -36,6 +38,7 @@ class AppSettings extends ChangeNotifier {
   double fontSize = 14.0;
   bool isAiFemale = false;
   bool isDarkMode = false;
+  Locale locale = const Locale('pl');
 
   void setFontSizeSmall() {
     fontSize = 12.0;
@@ -61,6 +64,12 @@ class AppSettings extends ChangeNotifier {
     isDarkMode = value;
     notifyListeners();
   }
+
+  void changeLocale(Locale newLocale) {
+    locale = newLocale;
+    TranslationService.locale = newLocale;
+    notifyListeners();
+  }
 }
 
 final AppSettings appSettings = AppSettings();
@@ -77,7 +86,12 @@ Future<void> main() async {
   } catch (e) {
     print("INFO: Brak pliku .env lub błąd ładowania: $e");
   }
-  runApp(const MoodJournalApp());
+  runApp(
+    ChangeNotifierProvider.value(
+      value: appSettings,
+      child: const MoodJournalApp(),
+    ),
+  );
 }
 
 class MoodJournalApp extends StatelessWidget {
@@ -205,14 +219,14 @@ class _LoginScreenState extends State<LoginScreen> {
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Podaj email i hasło")));
+      ).showSnackBar(SnackBar(content: Text(TranslationService.tr('enter_email_password'))));
       return;
     }
 
     if (!_isLoginMode && username.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Podaj nazwę użytkownika")));
+      ).showSnackBar(SnackBar(content: Text(TranslationService.tr('enter_username'))));
       return;
     }
 
@@ -224,15 +238,15 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isLoginMode) {
       success = await ApiService().loginUser(email, password);
       message = success
-          ? "Zalogowano pomyślnie!"
-          : "Błąd logowania. Sprawdź dane.";
+          ? TranslationService.tr('login_success')
+          : TranslationService.tr('login_error');
     } else {
       success = await ApiService().registerUser(email, username, password);
       if (success) {
         await ApiService().loginUser(email, password);
-        message = "Konto utworzone! Witaj $username.";
+        message = "${TranslationService.tr('account_created')}$username.";
       } else {
-        message = "Błąd rejestracji. Email może być zajęty.";
+        message = TranslationService.tr('register_error');
       }
     }
 
@@ -267,209 +281,248 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: AppColors.primaryBlue,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+        child: Consumer<AppSettings>(
+          builder: (context, settings, _) {
+            return Stack(
               children: [
-                // Logo
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.auto_awesome,
-                    size: 60,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Tytuł
-                const Text(
-                  "Mood Journal",
-                  style: TextStyle(
-                    fontSize: 32,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Podtytuł
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: Text(
-                    _isLoginMode ? "Witaj ponownie!" : "Utwórz nowe konto",
-                    key: ValueKey(_isLoginMode),
-                    style: const TextStyle(color: Colors.white70, fontSize: 16),
-                  ),
-                ),
-                const SizedBox(height: 40),
-
-                // Nazwa użytkownika (tylko przy rejestracji)
-                if (!_isLoginMode) ...[
-                  TextField(
-                    controller: _usernameController,
-                    focusNode: _usernameFocus,
-                    textInputAction: TextInputAction.next,
-                    onSubmitted: (_) {
-                      FocusScope.of(context).requestFocus(_emailFocus);
-                    },
-                    style: inputTextStyle,
-                    decoration: InputDecoration(
-                      labelText: "Nazwa użytkownika",
-                      labelStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
+                Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Logo
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
                       ),
-                      prefixIcon: const Icon(
-                        Icons.person,
-                        color: Colors.white70,
-                      ),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.1),
-                      contentPadding: inputDecorationContentPadding,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        size: 60,
+                        color: Colors.white,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                    const SizedBox(height: 24),
 
-                // Email
-                TextField(
-                  controller: _emailController,
-                  focusNode: _emailFocus,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) {
-                    FocusScope.of(context).requestFocus(_passwordFocus);
-                  },
-                  style: inputTextStyle,
-                  decoration: InputDecoration(
-                    labelText: "Email",
-                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
-                    prefixIcon: const Icon(Icons.email, color: Colors.white70),
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.1),
-                    contentPadding: inputDecorationContentPadding,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Hasło
-                TextField(
-                  controller: _passwordController,
-                  focusNode: _passwordFocus,
-                  obscureText: !_isPasswordVisible,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _handleSubmit(),
-                  style: inputTextStyle,
-                  decoration: InputDecoration(
-                    labelText: "Hasło",
-                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
-                    prefixIcon: const Icon(Icons.lock, color: Colors.white70),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isPasswordVisible
-                            ? Icons.visibility
-                            : Icons.visibility_off,
-                        color: Colors.white70,
+                    // Tytuł
+                    const Text(
+                      "Mood Journal",
+                      style: TextStyle(
+                        fontSize: 32,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Podtytuł
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: Text(
+                        _isLoginMode ? TranslationService.tr('welcome_back') : TranslationService.tr('create_account'),
+                        key: ValueKey(_isLoginMode),
+                        style: const TextStyle(color: Colors.white70, fontSize: 16),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+
+                    // Nazwa użytkownika (tylko przy rejestracji)
+                    if (!_isLoginMode) ...[
+                      TextField(
+                        controller: _usernameController,
+                        focusNode: _usernameFocus,
+                        textInputAction: TextInputAction.next,
+                        onSubmitted: (_) {
+                          FocusScope.of(context).requestFocus(_emailFocus);
+                        },
+                        style: inputTextStyle,
+                        decoration: InputDecoration(
+                          labelText: TranslationService.tr('username'),
+                          labelStyle: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.person,
+                            color: Colors.white70,
+                          ),
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.1),
+                          contentPadding: inputDecorationContentPadding,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Email
+                    TextField(
+                      controller: _emailController,
+                      focusNode: _emailFocus,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) {
+                        FocusScope.of(context).requestFocus(_passwordFocus);
                       },
+                      style: inputTextStyle,
+                      decoration: InputDecoration(
+                        labelText: TranslationService.tr('email'),
+                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                        prefixIcon: const Icon(Icons.email, color: Colors.white70),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.1),
+                        contentPadding: inputDecorationContentPadding,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
                     ),
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.1),
-                    contentPadding: inputDecorationContentPadding,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
+                    const SizedBox(height: 16),
 
-                // Przycisk
-                Bounceable(
-                  scaleFactor: 0.95,
-                  onTap: _isLoading ? () {} : _handleSubmit,
-                  child: Container(
-                    width: double.infinity,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 5),
+                    // Hasło
+                    TextField(
+                      controller: _passwordController,
+                      focusNode: _passwordFocus,
+                      obscureText: !_isPasswordVisible,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _handleSubmit(),
+                      style: inputTextStyle,
+                      decoration: InputDecoration(
+                        labelText: TranslationService.tr('password'),
+                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                        prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordVisible = !_isPasswordVisible;
+                            });
+                          },
+                        ),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.1),
+                        contentPadding: inputDecorationContentPadding,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Przycisk
+                    Bounceable(
+                      scaleFactor: 0.95,
+                      onTap: _isLoading ? () {} : _handleSubmit,
+                      child: Container(
+                        width: double.infinity,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text(
+                                _isLoginMode ? TranslationService.tr('login_btn') : TranslationService.tr('register_btn'),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryBlue,
+                                ),
+                              ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Przełącznik trybu
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _isLoginMode ? TranslationService.tr('no_account') : TranslationService.tr('has_account'),
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _isLoginMode = !_isLoginMode;
+                              _emailController.clear();
+                              _passwordController.clear();
+                              _usernameController.clear();
+                            });
+                          },
+                          child: Text(
+                            _isLoginMode ? TranslationService.tr('register_btn') : TranslationService.tr('login_btn'),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    alignment: Alignment.center,
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
-                            _isLoginMode ? "Zaloguj się" : "Zarejestruj się",
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryBlue,
-                            ),
-                          ),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Przełącznik trybu
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _isLoginMode ? "Nie masz konta? " : "Masz już konto? ",
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _isLoginMode = !_isLoginMode;
-                          _emailController.clear();
-                          _passwordController.clear();
-                          _usernameController.clear();
-                        });
-                      },
-                      child: Text(
-                        _isLoginMode ? "Zarejestruj się" : "Zaloguj się",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
-                const SizedBox(height: 20),
-              ],
+              ),
             ),
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Row(
+                children: [
+                  _buildLangBtn(settings, 'PL', const Locale('pl')),
+                  const SizedBox(width: 8),
+                  _buildLangBtn(settings, 'EN', const Locale('en')),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+      ),
+    );
+  }
+
+  Widget _buildLangBtn(AppSettings settings, String text, Locale locale) {
+    return GestureDetector(
+      onTap: () => settings.changeLocale(locale),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: settings.locale == locale ? Colors.white : Colors.white.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: settings.locale == locale ? AppColors.primaryBlue : Colors.white,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
@@ -491,6 +544,22 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
   final GlobalKey<CalendarScreenState> _calendarKey = GlobalKey();
 
   MoodEntry? _activeChatEntry;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    // Pobieramy dane użytkownika z API (np. preferencje trybu ciemnego)
+    final profile = await ApiService().getUserProfile();
+    if (profile != null) {
+      final isDark = profile['is_dark_mode'] as bool? ?? false;
+      // Aktualizujemy globalny stan
+      appSettings.toggleTheme(isDark);
+    }
+  }
 
   void _goToCalendar() {
     setState(() {
@@ -521,15 +590,15 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          "Zarządzaj wpisem",
+        title: Text(
+          TranslationService.tr('manage_entry'),
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              "Co chcesz zrobić z tym wpisem?",
+            Text(
+              TranslationService.tr('what_to_do_with_entry'),
               style: TextStyle(color: AppColors.textGrey),
             ),
             const SizedBox(height: 20),
@@ -566,8 +635,8 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                     Flexible(
                       child: Text(
                         entry.conversation.isNotEmpty
-                            ? "Kontynuuj rozmowę"
-                            : "Rozpocznij rozmowę z AI",
+                            ? TranslationService.tr('continue_chat')
+                            : TranslationService.tr('start_chat_ai'),
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -596,13 +665,13 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                   border: Border.all(color: AppColors.primaryBlue),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.edit, color: AppColors.primaryBlue),
                     SizedBox(width: 8),
                     Text(
-                      "Edytuj treść",
+                      TranslationService.tr('edit_content'),
                       style: TextStyle(
                         color: AppColors.primaryBlue,
                         fontWeight: FontWeight.bold,
@@ -733,7 +802,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              "Rozmowa z Asystentem",
+              TranslationService.tr('chat_with_assistant_mode'),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -767,7 +836,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Nowy wpis",
+                    TranslationService.tr('new_entry_mode'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: textColor,
@@ -776,7 +845,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                     ),
                   ),
                   Text(
-                    "Opisz jak się teraz czujesz",
+                    TranslationService.tr('describe_feeling'),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: subTextColor, fontSize: 12),
                   ),
@@ -807,7 +876,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Wpis z historii",
+                    TranslationService.tr('history_entry_mode'),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: textColor,
@@ -816,7 +885,7 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
                     ),
                   ),
                   Text(
-                    "Porozmawiaj o przeszłości",
+                    TranslationService.tr('talk_about_past'),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: subTextColor, fontSize: 12),
                   ),

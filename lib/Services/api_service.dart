@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/mood_entry.dart';
 import '../models/mood_analysis.dart';
+import '../models/sobriety_clock.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -99,6 +100,7 @@ class ApiService {
     String? birthDate,
     String? email,
     String? profileImagePath,
+    bool? isDarkMode,
     String? password,
   }) async {
     if (currentUserId == null) return false;
@@ -111,6 +113,7 @@ class ApiService {
     if (birthDate != null) body['birth_date'] = birthDate;
     if (email != null) body['email'] = email;
     if (profileImagePath != null) body['profile_image_path'] = profileImagePath;
+    if (isDarkMode != null) body['is_dark_mode'] = isDarkMode;
     if (password != null && password.isNotEmpty) body['password'] = password;
 
     try {
@@ -124,6 +127,18 @@ class ApiService {
       return response.statusCode == 200;
     } catch (e) {
       print("Błąd aktualizacji profilu: $e");
+      return false;
+    }
+  }
+
+  Future<bool> deleteUserAccount() async {
+    if (currentUserId == null) return false;
+    final url = Uri.parse('$_baseUrl/users/$currentUserId');
+    try {
+      final response = await http.delete(url).timeout(const Duration(seconds: 10));
+      return response.statusCode == 204 || response.statusCode == 200;
+    } catch (e) {
+      print("Błąd usuwania konta: $e");
       return false;
     }
   }
@@ -204,26 +219,42 @@ class ApiService {
   }
 
   // --- ANALIZA AI ---
-  Future<MoodAnalysis?> getMoodAnalysis(String rangeType) async {
+  Future<MoodAnalysis?> getMoodAnalysis(String rangeType, String languageCode) async {
+    // ... (existing code) ...
     if (currentUserId == null) return null;
 
     final url = Uri.parse('$_baseUrl/ai/weekly_summary/$currentUserId');
     DateTime now = DateTime.now();
     DateTime startDate = now;
 
+    // Mapowanie zakresów (jeśli UI wysyła PL nazwy, a backend potrzebuje czegoś innego,
+    // ale tu logika jest po stronie Darta)
+    // UWAGA: Jeśli 'rangeType' jest z TranslationService, to może być po angielsku!
+    // Dla uproszczenia zakładamy, że logika dat jest uniwersalna lub UI wysyła klucze.
+    // Ale w main.dart przekazujemy przetłumaczone stringi do UI...
+    // Sprawdźmy co wysyła AnalysisDetailScreen. Wysyła _currentRange, który jest z listy ['Dzień', 'Tydzień'...]
+    // Trzeba to ujednolicić, ale na razie dodajmy tylko lang.
+
     switch (rangeType) {
       case 'Dzień':
+      case 'Day': // English support
         startDate = now;
         break;
       case 'Tydzień':
+      case 'Week':
         startDate = now.subtract(const Duration(days: 7));
         break;
       case 'Miesiąc':
+      case 'Month':
         startDate = now.subtract(const Duration(days: 30));
         break;
       case 'Rok':
+      case 'Year':
         startDate = now.subtract(const Duration(days: 365));
         break;
+      default:
+        // Fallback dla innych języków lub błędów - domyślnie tydzień
+        startDate = now.subtract(const Duration(days: 7));
     }
 
     try {
@@ -234,6 +265,7 @@ class ApiService {
             body: jsonEncode({
               "start_date": startDate.toIso8601String(),
               "end_date": now.toIso8601String(),
+              "lang": languageCode, // <--- NOWY PARAMETR
             }),
           )
           .timeout(const Duration(seconds: 15));
@@ -248,6 +280,70 @@ class ApiService {
     } catch (e) {
       print("Błąd połączenia (analiza): $e");
       return null;
+    }
+  }
+
+  // --- SOBRIETY CLOCK ---
+  Future<bool> createSobrietyClock(String type, DateTime startDate, {String customName = ""}) async {
+    if (currentUserId == null) return false;
+    final url = Uri.parse('$_baseUrl/sobriety/clocks');
+    try {
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "user_id": currentUserId,
+          "addiction_type": type,
+          "custom_name": customName,
+          "start_date": startDate.toIso8601String(),
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Błąd tworzenia zegara: $e");
+      return false;
+    }
+  }
+
+  Future<List<SobrietyClock>> getSobrietyClocks() async {
+    if (currentUserId == null) return [];
+    final url = Uri.parse('$_baseUrl/sobriety/clocks/$currentUserId');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+        return data.map((e) => SobrietyClock.fromJson(e)).toList();
+      }
+      return [];
+    } catch (e) {
+      print("Błąd pobierania zegarów: $e");
+      return [];
+    }
+  }
+
+  Future<bool> resetSobrietyClock(int clockId, DateTime newDate) async {
+    final url = Uri.parse('$_baseUrl/sobriety/clocks/$clockId/reset');
+    try {
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"new_date": newDate.toIso8601String()}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Błąd resetowania zegara: $e");
+      return false;
+    }
+  }
+
+  Future<bool> deleteSobrietyClock(int clockId) async {
+    final url = Uri.parse('$_baseUrl/sobriety/clocks/$clockId');
+    try {
+      final response = await http.delete(url);
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Błąd usuwania zegara: $e");
+      return false;
     }
   }
 }

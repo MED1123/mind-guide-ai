@@ -6,6 +6,7 @@ import 'package:flutter_bounceable/flutter_bounceable.dart';
 
 import '../Services/database_service.dart';
 import '../models/mood_entry.dart';
+import '../Services/translation_service.dart'; // Import
 import '../main.dart';
 
 // --- EKRAN EDYCJI ---
@@ -147,7 +148,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: const Text("Edycja wpisu"),
+        title: Text(TranslationService.tr('edit_entry_title')),
         backgroundColor: backgroundColor,
         surfaceTintColor: Colors.transparent,
       ),
@@ -157,7 +158,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Edytuj treść:",
+              TranslationService.tr('edit_content_label'),
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -180,10 +181,10 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
                 controller: _textController,
                 maxLines: 6,
                 style: TextStyle(color: textColor),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.all(16),
-                  hintText: "Twój wpis...",
+                  hintText: TranslationService.tr('your_entry_hint'),
                 ),
               ),
             ),
@@ -195,7 +196,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  "Załączone zdjęcia:",
+                  TranslationService.tr('attached_photos'),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -227,7 +228,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 child: Center(
                   child: Text(
-                    "Brak zdjęć",
+                    TranslationService.tr('no_photos'),
                     style: TextStyle(color: Colors.grey.shade500),
                   ),
                 ),
@@ -287,7 +288,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
             const SizedBox(height: 30),
 
             Text(
-              "Pomoc Asystenta AI",
+              TranslationService.tr('ai_help_title'),
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -295,8 +296,8 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
               ),
             ),
             const SizedBox(height: 5),
-            const Text(
-              "Czy chcesz, aby asystent przeanalizował ten wpis?",
+            Text(
+              TranslationService.tr('ai_help_desc'),
               style: TextStyle(color: AppColors.textGrey, fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -317,7 +318,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
                       ),
                       child: Center(
                         child: Text(
-                          "Nie",
+                          TranslationService.tr('no'),
                           style: TextStyle(
                             color: !_wantAI ? Colors.white : AppColors.textGrey,
                             fontWeight: FontWeight.bold,
@@ -340,7 +341,7 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
                       ),
                       child: Center(
                         child: Text(
-                          "Tak (Czat)",
+                          TranslationService.tr('yes_chat'),
                           style: TextStyle(
                             color: _wantAI ? Colors.white : AppColors.textGrey,
                             fontWeight: FontWeight.bold,
@@ -364,8 +365,8 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 alignment: Alignment.center,
-                child: const Text(
-                  "Zapisz zmiany",
+                child: Text(
+                  TranslationService.tr('save_changes'),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

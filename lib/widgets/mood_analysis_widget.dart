@@ -4,6 +4,7 @@ import '../Services/api_service.dart';
 import '../main.dart';
 import '../models/mood_analysis.dart';
 import '../screens/analysis_detail_screen.dart';
+import '../Services/translation_service.dart';
 
 class MoodAnalysisWidget extends StatefulWidget {
   const MoodAnalysisWidget({super.key});
@@ -28,7 +29,8 @@ class _MoodAnalysisWidgetState extends State<MoodAnalysisWidget> {
   void _fetchAnalysis() async {
     setState(() => _isLoading = true);
     final range = _ranges[_currentIndex];
-    final result = await ApiService().getMoodAnalysis(range);
+    final result = await ApiService()
+        .getMoodAnalysis(range, appSettings.locale.languageCode);
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -121,7 +123,7 @@ class _MoodAnalysisWidgetState extends State<MoodAnalysisWidget> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
                     child: Text(
-                      _ranges[_currentIndex],
+                      TranslationService.tr(_ranges[_currentIndex]),
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,

@@ -6,6 +6,7 @@ import 'package:flutter_bounceable/flutter_bounceable.dart';
 import '../Services/database_service.dart';
 import '../Services/api_service.dart';
 import '../models/mood_entry.dart';
+import '../Services/translation_service.dart'; // Import
 import '../main.dart';
 import '../widgets/mood_card.dart';
 import '../widgets/mood_analysis_widget.dart';
@@ -100,7 +101,7 @@ class CalendarScreenState extends State<CalendarScreen> {
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Text(
-                " Twój Kalendarz",
+                TranslationService.tr('your_calendar'),
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
             ),
@@ -117,7 +118,7 @@ class CalendarScreenState extends State<CalendarScreen> {
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: TableCalendar(
-                  locale: 'pl_PL',
+                  locale: appSettings.locale.toLanguageTag(),
                   firstDay: DateTime.utc(2024, 1, 1),
                   lastDay: DateTime.utc(2030, 12, 31),
                   focusedDay: _focusedDay,
@@ -191,8 +192,8 @@ class CalendarScreenState extends State<CalendarScreen> {
               padding: const EdgeInsets.fromLTRB(24, 30, 24, 10),
               child: Text(
                 _selectedDay != null
-                    ? "Wpisy z ${DateFormat('d MMMM', 'pl_PL').format(_selectedDay!)}"
-                    : "Wybierz dzień",
+                    ? "${TranslationService.tr('entries_from')} ${DateFormat('d MMMM', appSettings.locale.toLanguageTag()).format(_selectedDay!)}"
+                    : TranslationService.tr('select_day'),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -207,7 +208,7 @@ class CalendarScreenState extends State<CalendarScreen> {
                     padding: const EdgeInsets.all(30.0),
                     child: Center(
                       child: Text(
-                        "Brak wpisów",
+                        TranslationService.tr('no_entries'),
                         style: TextStyle(
                           color: AppColors.textGrey.withOpacity(0.5),
                         ),
