@@ -218,17 +218,24 @@ class HomeScreenUIState extends State<HomeScreenUI> {
       ownerId: currentUserId,
     );
 
-    int id = await DatabaseService.instance.createEntry(newEntry);
+    int localId = await DatabaseService.instance.createEntry(newEntry);
+    int? backendId;
 
     try {
-      await ApiService().createEntry(newEntry);
+      backendId = await ApiService().createEntry(newEntry);
+      if (backendId != null) {
+        // Sync: Update local entry with backend ID
+        await DatabaseService.instance.updateBackendId(localId, backendId);
+        print("Zsynchonizowano ID: Local=$localId -> Backend=$backendId");
+      }
     } catch (e) {
       print("Nie udało się zsynchronizować z serwerem: $e");
     }
 
     // Hack na odświeżenie listy z nowym ID
     final entryWithId = MoodEntry(
-        id: id,
+        id: localId, // LOCAL ID
+        backendId: backendId, // BACKEND ID
         date: newEntry.date,
         text: newEntry.text,
         moodRating: newEntry.moodRating,
@@ -685,24 +692,22 @@ class HomeScreenUIState extends State<HomeScreenUI> {
                                     Row(
                                       children: [
                                         Expanded(
-                                          child: _buildChoiceBtn(
+                                          child: _buildAvatarChoice(
                                             context,
                                             TranslationService.tr('male_voice'),
+                                            'assets/images/male_avatar.png',
                                             !_tempIsAiFemale,
-                                            () => setState(
-                                              () => _tempIsAiFemale = false,
-                                            ),
+                                            () => setState(() => _tempIsAiFemale = false),
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
-                                          child: _buildChoiceBtn(
+                                          child: _buildAvatarChoice(
                                             context,
                                             TranslationService.tr('female_voice'),
+                                            'assets/images/female_avatar.png',
                                             _tempIsAiFemale,
-                                            () => setState(
-                                              () => _tempIsAiFemale = true,
-                                            ),
+                                            () => setState(() => _tempIsAiFemale = true),
                                           ),
                                         ),
                                       ],
@@ -837,6 +842,59 @@ class HomeScreenUIState extends State<HomeScreenUI> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAvatarChoice(
+      BuildContext context,
+      String label,
+      String assetPath,
+      bool isActive,
+      VoidCallback onTap,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isActive
+        ? AppColors.primaryBlue
+        : (isDark ? Colors.white12 : Colors.grey.shade200);
+    final bgColor = isActive
+        ? AppColors.primaryBlue.withOpacity(0.1)
+        : (isDark ? Colors.black12 : Colors.grey.shade50);
+
+    return Bounceable(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor, width: isActive ? 2 : 1),
+        ),
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundImage: AssetImage(assetPath),
+              backgroundColor: Colors.transparent,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: isActive 
+                    ? AppColors.primaryBlue 
+                    : (isDark ? Colors.white70 : Colors.black54),
+              ),
+            ),
+            if (isActive) ...[
+               const SizedBox(height: 4),
+               const Icon(Icons.check_circle, size: 16, color: AppColors.primaryBlue),
+            ]
+          ],
+        ),
       ),
     );
   }

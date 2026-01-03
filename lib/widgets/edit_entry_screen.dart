@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart'; // Galeria
 import 'package:flutter_bounceable/flutter_bounceable.dart';
 
 import '../Services/database_service.dart';
+import '../Services/api_service.dart'; // Import
 import '../models/mood_entry.dart';
 import '../Services/translation_service.dart'; // Import
 import '../main.dart';
@@ -127,6 +128,15 @@ class _EditEntryScreenState extends State<EditEntryScreen> {
     );
 
     await DatabaseService.instance.updateEntry(updatedEntry);
+
+    // Sync with backend
+    if (updatedEntry.backendId != null) {
+      await ApiService().updateEntry(updatedEntry);
+    } else {
+      print("Warning: Edytowany wpis nie ma backendId, nie można zsynchronizować edycji.");
+      // Optional: Try to find by content? Or just let it be. 
+      // Ideally we should enforce backendId presence or creation.
+    }
 
     if (!mounted) return;
 

@@ -5,8 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bounceable/flutter_bounceable.dart';
 import 'package:image_picker/image_picker.dart';
 import '../Services/api_service.dart';
+import 'change_password_screen.dart';
 import '../models/mood_analysis.dart';
-import '../main.dart'; // AppColors, AppSettings
+import '../main.dart'; // For LoginScreen, AppColors, AppSettings
 import '../Services/translation_service.dart'; // Import
 import 'analysis_detail_screen.dart'; // Import
 import 'sobriety_screen.dart'; // Import
@@ -24,9 +25,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoadingAnalysis = false;
   bool _isLoadingProfile = false;
 
+
+
   String _displayName = TranslationService.tr('user_default');
   String _displayUsername = "";
   String _profileImagePath = "";
+  String _originalEmail = ""; // Store original email to detect changes
 
   final _nameController = TextEditingController();
   final _surnameController = TextEditingController();
@@ -75,6 +79,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _usernameController.text = username;
           _dobController.text = profileData['birth_date'] ?? "";
           _emailController.text = profileData['email'] ?? "";
+          _originalEmail = _emailController.text; // Update original email
           _isLoadingProfile = false;
         });
       }
@@ -83,7 +88,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     final analysisResult = await ApiService()
-        .getMoodAnalysis('Tydzień', appSettings.locale.languageCode);
+        .getMoodAnalysis('week', appSettings.locale.languageCode);
     if (mounted) {
       setState(() {
         _analysis = analysisResult;
@@ -192,7 +197,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context,
       MaterialPageRoute(
         builder: (context) =>
-            AnalysisDetailScreen(initialRange: 'Tydzień', initialAnalysis: _analysis),
+            AnalysisDetailScreen(initialRange: 'week', initialAnalysis: _analysis),
         fullscreenDialog: true,
       ),
     );
@@ -631,12 +636,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     },
                   ),
 
-                  const Divider(),
+
 
                   _buildSettingsItem(
                     icon: Icons.lock_outline,
                     title: TranslationService.tr('change_password'),
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      Navigator.push(
+                        this.context, // Use ProfileScreen context
+                        MaterialPageRoute(
+                          builder: (c) => ChangePasswordScreen(isDark: isCurrentDark),
+                        ),
+                      );
+                    },
                     isDark: isCurrentDark,
                   ),
                   _buildSettingsItem(
@@ -840,21 +853,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Bounceable(
                 onTap: () async {
                   HapticFeedback.mediumImpact();
+                  final newEmail = _emailController.text;
+                  final emailChanged = newEmail != _originalEmail;
+
                   final success = await ApiService().updateUserProfile(
                     name: _nameController.text,
                     surname: _surnameController.text,
                     username: _usernameController.text,
                     birthDate: _dobController.text,
-                    email: _emailController.text,
+                    email: newEmail,
                   );
 
                   if (success) {
                     _fetchData();
                     if (context.mounted) {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Zapisano zmiany!")),
-                      );
+                      if (emailChanged) {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: Text(TranslationService.tr('change_email_title')),
+                            content: Text(TranslationService.tr('verify_email_sent')),
+                            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Zapisano zmiany!")),
+                        );
+                      }
                     }
                   } else {
                     if (context.mounted) {
@@ -901,13 +928,93 @@ class _ProfileScreenState extends State<ProfileScreen> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: Colors.grey),
-        prefixIcon: Icon(icon, color: Colors.grey, size: 20),
-        filled: true,
-        fillColor: isDark ? Colors.white10 : Colors.grey.shade100,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+        prefixIcon: Icon(icon, color: Colors.grey),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.withOpacity(0.3)),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.primaryBlue),
+        ),
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final newPassCtx = TextEditingController();
+    final confirmPassCtx = TextEditingController();
+    
+    showDialog(
+      context: context, 
+      builder: (ctx) => AlertDialog(
+        title: Text(TranslationService.tr('change_password_title')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: newPassCtx,
+              obscureText: true,
+              decoration: InputDecoration(labelText: TranslationService.tr('new_password')),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: confirmPassCtx,
+              obscureText: true,
+              decoration: InputDecoration(labelText: TranslationService.tr('confirm_password')),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(TranslationService.tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () async {
+              final newPass = newPassCtx.text;
+              final confirmPass = confirmPassCtx.text;
+
+              // Walidacja
+              // Min 8 znaków, 1 duża litera, 1 cyfra, 1 znak specjalny
+              final hasMinLength = newPass.length >= 8;
+              final hasUppercase = newPass.contains(RegExp(r'[A-Z]'));
+              final hasDigit = newPass.contains(RegExp(r'[0-9]'));
+              final hasSpecial = newPass.contains(RegExp(r'[!@#\\$%^&*(),.?":{}|<>]'));
+
+              if (!hasMinLength || !hasUppercase || !hasDigit || !hasSpecial) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(TranslationService.tr('password_requirements'))),
+                );
+                return;
+              }
+
+              if (newPass != confirmPass) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(TranslationService.tr('password_mismatch'))),
+                );
+                return;
+              }
+
+              Navigator.pop(ctx); // Zamknij dialog przed API call (UX decision) - or keep it open with loading?
+              // Zamykamy i pokazujemy wynik na ekranie profilu
+
+              final success = await ApiService().updateUserProfile(password: newPass);
+              if (mounted) {
+                if (success) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(TranslationService.tr('password_changed'))),
+                  );
+                } else {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(TranslationService.tr('password_change_error'))),
+                  );
+                }
+              }
+            },
+            child: Text(TranslationService.tr('save')),
+          ),
+        ],
       ),
     );
   }

@@ -14,7 +14,7 @@ class MoodAnalysisWidget extends StatefulWidget {
 }
 
 class _MoodAnalysisWidgetState extends State<MoodAnalysisWidget> {
-  final List<String> _ranges = ['Dzień', 'Tydzień', 'Miesiąc', 'Rok'];
+  final List<String> _ranges = ['day', 'week', 'month', 'year'];
   int _currentIndex = 1;
 
   MoodAnalysis? _analysis;
@@ -150,7 +150,7 @@ class _MoodAnalysisWidgetState extends State<MoodAnalysisWidget> {
                       padding: const EdgeInsets.symmetric(vertical: 20),
                       child: Center(
                         child: Text(
-                          "Brak danych dla: ${_ranges[_currentIndex]}",
+                          "Brak danych dla: ${TranslationService.tr(_ranges[_currentIndex])}",
                           style: TextStyle(
                             color: AppColors.textGrey,
                             fontSize: 12,

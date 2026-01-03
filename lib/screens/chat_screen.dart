@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../Services/database_service.dart';
 import '../Services/gpt_service.dart';
+import '../Services/api_service.dart';
 import '../Services/tts_service.dart';
 import '../Services/translation_service.dart'; // Import
 import '../models/mood_entry.dart';
@@ -226,6 +227,9 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _currentEntry = widget.entry;
     _loadMessagesFromEntry();
+    
+    // Refresh entry to ensure we have the backendId if it was just created
+    _refreshEntryFromDB();
 
     _ttsService.init();
 
@@ -271,54 +275,54 @@ class _ChatScreenState extends State<ChatScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Colors.blueAccent,
-                child: Icon(Icons.face, color: Colors.white),
-              ),
-              title: Text(
-                TranslationService.tr('assistant'),
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(TranslationService.tr('male_voice')),
-              trailing: !appSettings.isAiFemale
-                  ? const Icon(Icons.check_circle, color: AppColors.primaryBlue)
-                  : null,
-              onTap: () {
-                if (appSettings.isAiFemale) {
-                  appSettings.toggleGender(false);
-                }
-                Navigator.pop(ctx);
-              },
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            leading: const CircleAvatar(
+              radius: 24,
+              backgroundImage: AssetImage('assets/images/male_avatar.png'),
+              backgroundColor: Colors.transparent,
             ),
-            const Divider(),
-            ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Colors.pinkAccent,
-                child: Icon(Icons.face_3, color: Colors.white),
-              ),
-              title: Text(
-                TranslationService.tr('assistant_female'),
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(TranslationService.tr('female_voice')),
-              trailing: appSettings.isAiFemale
-                  ? const Icon(Icons.check_circle, color: Colors.pinkAccent)
-                  : null,
-              onTap: () {
-                if (!appSettings.isAiFemale) {
-                  appSettings.toggleGender(true);
-                  // USUNIĘTO WYMUSZONE POWITANIE
-                }
-                Navigator.pop(ctx);
-              },
+            title: Text(
+              TranslationService.tr('male_voice'),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
-          ],
-        ),
+            trailing: !appSettings.isAiFemale
+                ? const Icon(Icons.check_circle, color: AppColors.primaryBlue, size: 28)
+                : null,
+            onTap: () {
+              if (appSettings.isAiFemale) {
+                appSettings.toggleGender(false);
+              }
+              Navigator.pop(ctx);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            leading: const CircleAvatar(
+              radius: 24,
+              backgroundImage: AssetImage('assets/images/female_avatar.png'),
+              backgroundColor: Colors.transparent,
+            ),
+            title: Text(
+              TranslationService.tr('female_voice'),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            trailing: appSettings.isAiFemale
+                ? const Icon(Icons.check_circle, color: Colors.pinkAccent, size: 28)
+                : null,
+            onTap: () {
+              if (!appSettings.isAiFemale) {
+                appSettings.toggleGender(true);
+              }
+              Navigator.pop(ctx);
+            },
+          ),
+        ],
       ),
-    );
-  }
-
+    ),
+  );
+}
   void _showFullImage(String path) {
     HapticFeedback.selectionClick();
     showDialog(
@@ -595,6 +599,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (lastUserMsg['role'] == 'user') {
       userInputText = lastUserMsg['text']!;
     } else if (lastUserMsg['role'] == 'user_image') {
+      // Jeśli ostatnia wiadomość to zdjęcie, szukamy tekstu powiązanego
+      // Ale jeśli nie ma, wysyłamy domyślny
       userInputText = "Przesyłam zdjęcie.";
     }
 
@@ -658,10 +664,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() {
       for (var path in imagesToSend) {
+        print("DEBUG: Adding image message path: $path");
         _messages.add({"role": "user_image", "path": path, "time": now});
       }
-      if (userText.isNotEmpty) {
-        _messages.add({"role": "user", "text": userText, "time": now});
+      
+      // Sanityzacja inputu (pipe psuje format zapisu)
+      String safeUserText = userText.replaceAll('|', ' ');
+      
+      if (safeUserText.isNotEmpty) {
+        String displayText = safeUserText;
+        if (imagesToSend.isNotEmpty) {
+           displayText += "\n\n📷 Załączono ${imagesToSend.length} zdjęcie/a";
+        }
+        _messages.add({"role": "user", "text": displayText, "time": now});
       }
       _isTyping = true;
 
@@ -680,7 +695,9 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _scrollToBottom();
 
-    String prompt = userText.isEmpty ? "Przesłałem zdjęcie." : userText;
+    String prompt = userText.isNotEmpty 
+        ? (imagesToSend.isNotEmpty ? "$userText\n\n[Załączono ${imagesToSend.length} zdjęcie/a]" : userText) 
+        : "Przesłałem zdjęcie.";
     int newItems = (userText.isNotEmpty ? 1 : 0) + imagesToSend.length;
     String history = "";
 
@@ -699,6 +716,7 @@ class _ChatScreenState extends State<ChatScreen> {
         appSettings.isAiFemale,
         appSettings.locale.languageCode, // <--- New Param
         imagePaths: _currentEntry.imagePaths,
+        assistantName: appSettings.assistantName,
       );
 
       if (!mounted) return;
@@ -874,12 +892,214 @@ class _ChatScreenState extends State<ChatScreen> {
   void _deleteEntireEntry() async {
     if (_currentEntry.id != null) {
       await DatabaseService.instance.deleteEntry(_currentEntry.id!);
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Wpis został usunięty")));
-        widget.onGoToCalendar?.call();
+      
+      // 2. Attempt Backend Deletion
+    bool backendDeleted = false;
+    
+    // Attempt 1: Using known backendId
+    if (_currentEntry.backendId != null) {
+      print("Próba usunięcia przez backendId: ${_currentEntry.backendId}");
+      backendDeleted = await ApiService().deleteEntry(_currentEntry.backendId!);
+    }
+    
+    // Attempt 2: Fallback - Search by content/date if ID failed or missing
+    if (!backendDeleted) {
+      print("Próba awaryjna usunięcia (Server-Side Matching)...");
+      backendDeleted = await ApiService().deleteEntryByContent(
+        _currentEntry.date, 
+        _currentEntry.text
+      );
+    }
+    
+    if (backendDeleted) {
+       print("Zsynchronizowano usunięcie z serwerem.");
+    } else {
+       print("Ostrzeżenie: Nie udało się usunąć wpisu z serwera.");
+    }
+
+    if (mounted) {
+      // Use onBack instead of pop because ChatScreen is not pushed but switched via index
+      widget.onBack(); 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Wpis został usunięty"))
+      );
+    }
+    }
+  }
+
+  void _showChangeAssistantNameDialog() {
+    final controller = TextEditingController(text: appSettings.customAssistantName ?? "");
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        titlePadding: EdgeInsets.zero,
+        title: Column(
+          children: [
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.badge, size: 32, color: AppColors.primaryBlue),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              TranslationService.tr('change_assistant_name'),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Text(
+              TranslationService.tr('enter_assistant_name'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isDark ? Colors.white70 : Colors.black54,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: InputDecoration(
+                hintText: "np. Jarvis",
+                hintStyle: TextStyle(color: isDark ? Colors.white30 : Colors.black26),
+                filled: true,
+                fillColor: isDark ? Colors.black26 : Colors.grey.shade100,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: AppColors.primaryBlue, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () async {
+                    appSettings.setCustomAssistantName(null);
+                    await ApiService().updateUserProfile(customAssistantName: ""); 
+                    if (mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(TranslationService.tr('assistant_name_saved'))),
+                      );
+                    }
+                  },
+                  child: Text(
+                    TranslationService.tr('restore_default'),
+                    style: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    side: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    TranslationService.tr('cancel'),
+                    style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final newName = controller.text.trim();
+                    if (newName.isNotEmpty) {
+                       // UX: Zamknij od razu, zapisz w tle
+                       appSettings.setCustomAssistantName(newName);
+                       Navigator.pop(ctx);
+                       
+                       // Show snackbar immediately for responsiveness
+                       ScaffoldMessenger.of(context).showSnackBar(
+                         SnackBar(content: Text(TranslationService.tr('assistant_name_saved'))),
+                       );
+                       
+                       // Sync in background
+                       await ApiService().updateUserProfile(customAssistantName: newName);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: Text(TranslationService.tr('save')),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Assuming this is part of initState or a similar setup method
+  // The exact location of this block is inferred from the provided context.
+  // This block should be placed within the class, before _scrollToBottom().
+  // The `initState` method itself is not fully provided in the original context,
+  // but the instruction implies calling `_refreshEntryFromDB()` within it.
+  // For the purpose of this edit, I'm placing the call and the method definition
+  // as per the provided snippet.
+  // If this is not within initState, please provide the full initState method.
+  // The `});` and `}` suggest the end of a method, likely initState.
+  // Refresh entry to ensure we have the backendId if it was just created
+  // _refreshEntryFromDB(); // This call should be inside initState.
+  // The user's instruction is to call it in initState.
+  // Since initState is not provided, I'm adding the method definition here.
+
+  Future<void> _refreshEntryFromDB() async {
+    if (_currentEntry.id != null) {
+      final freshEntries = await DatabaseService.instance.readEntriesForUser(
+        ApiService().currentUserId ?? ""
+      );
+      // Find the updated entry
+      try {
+        final freshEntry = freshEntries.firstWhere((e) => e.id == _currentEntry.id);
+        setState(() {
+          _currentEntry = freshEntry;
+        });
+        print("ChatScreen: Odświeżono wpis. BackendID: ${_currentEntry.backendId}");
+      } catch (e) {
+        print("ChatScreen: Nie znaleziono wpisu w bazie do odświeżenia.");
       }
     }
   }
@@ -920,32 +1140,28 @@ class _ChatScreenState extends State<ChatScreen> {
               onPressed: widget.onBack,
             ),
             // NAGŁÓWEK Z WYBOREM OSOBOWOŚCI
+            centerTitle: true,
             title: GestureDetector(
               onTap: _showPersonaSelector,
-              child: Row(
+              child: Column(
                 children: [
                   CircleAvatar(
-                    backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
-                    child: Icon(
-                      appSettings.isAiFemale ? Icons.face_3 : Icons.face,
-                      color: AppColors.primaryBlue,
+                    radius: 20,
+                    backgroundImage: AssetImage(
+                      appSettings.isAiFemale 
+                          ? 'assets/images/female_avatar.png' 
+                          : 'assets/images/male_avatar.png'
                     ),
+                    backgroundColor: Colors.transparent, // Remove background color
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        appSettings.isAiFemale
-                            ? "Asystentka AI"
-                            : "Asystent AI",
-                        style: TextStyle(
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    appSettings.assistantName,
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -1002,6 +1218,23 @@ class _ChatScreenState extends State<ChatScreen> {
                                   : Icons.light_mode,
                             ),
                             onChanged: (v) => appSettings.toggleTheme(v),
+                          ),
+                          ListTile(
+                             title: Text(
+                               TranslationService.tr('change_assistant_name'),
+                               maxLines: 1,
+                               overflow: TextOverflow.ellipsis,
+                               style: TextStyle(
+                                 fontSize: 15,
+                                 fontWeight: FontWeight.bold,
+                               ),
+                             ),
+                             leading: const Icon(Icons.badge_outlined, color: AppColors.primaryBlue),
+                             trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                             onTap: () {
+                               Navigator.pop(context);
+                               _showChangeAssistantNameDialog();
+                             },
                           ),
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -1229,7 +1462,30 @@ class _ChatScreenState extends State<ChatScreen> {
                                     child: Image.file(
                                       File(msg['path']!),
                                       width: 200,
+                                      height: 200,
                                       fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Container(
+                                          width: 200,
+                                          height: 200,
+                                          color: Colors.grey.shade300,
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(
+                                                Icons.broken_image,
+                                                color: Colors.grey,
+                                                size: 40,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                "Błąd ładowania",
+                                                style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                                              )
+                                            ],
+                                          ),
+                                        );
+                                      },
                                     ),
                                   )
                                 else

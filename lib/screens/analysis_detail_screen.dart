@@ -27,7 +27,7 @@ class _AnalysisDetailScreenState extends State<AnalysisDetailScreen> {
   MoodAnalysis? _analysis;
   bool _isLoading = false;
 
-  final List<String> _ranges = ['Dzień', 'Tydzień', 'Miesiąc', 'Rok'];
+  final List<String> _ranges = ['day', 'week', 'month', 'year'];
 
   @override
   void initState() {

@@ -11,7 +11,7 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
 
-  int? currentUserId;
+  String? currentUserId;
 
   String get _baseUrl {
     final url = dotenv.env['API_URL'];
@@ -49,6 +49,24 @@ class ApiService {
     }
   }
 
+  Future<bool> requestPasswordReset(String email) async {
+    final url = Uri.parse('$_baseUrl/auth/forgot-password');
+    // Using x-www-form-urlencoded as backend expects Form(...)
+    try {
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: {
+          "email": email,
+        },
+      ).timeout(const Duration(seconds: 10));
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Błąd żądania resetu hasła: $e");
+      return false;
+    }
+  }
+
   Future<bool> loginUser(String email, String password) async {
     final url = Uri.parse('$_baseUrl/auth/login');
     try {
@@ -66,14 +84,17 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        currentUserId = data['user_id'];
+        currentUserId = data['user_id'].toString();
         print("Zalogowano ID: $currentUserId");
         return true;
+      } else if (response.statusCode == 403) {
+        throw "EmailNotVerified";
+      } else {
+        throw "LoginFailed"; // 400 or others
       }
-      return false;
     } catch (e) {
       print("Błąd logowania: $e");
-      return false;
+      rethrow;
     }
   }
 
@@ -102,6 +123,8 @@ class ApiService {
     String? profileImagePath,
     bool? isDarkMode,
     String? password,
+    String? oldPassword,
+    String? customAssistantName,
   }) async {
     if (currentUserId == null) return false;
     final url = Uri.parse('$_baseUrl/users/$currentUserId');
@@ -114,7 +137,11 @@ class ApiService {
     if (email != null) body['email'] = email;
     if (profileImagePath != null) body['profile_image_path'] = profileImagePath;
     if (isDarkMode != null) body['is_dark_mode'] = isDarkMode;
-    if (password != null && password.isNotEmpty) body['password'] = password;
+    if (password != null && password.isNotEmpty) {
+      body['password'] = password;
+      if (oldPassword != null) body['old_password'] = oldPassword;
+    }
+    if (customAssistantName != null) body['custom_assistant_name'] = customAssistantName;
 
     try {
       final response = await http
@@ -145,10 +172,10 @@ class ApiService {
 
   // --- WPISY (ENTRIES) ---
 
-  Future<bool> createEntry(MoodEntry entry) async {
+  Future<int?> createEntry(MoodEntry entry) async {
     if (currentUserId == null) {
       print("Błąd: Nie zalogowano użytkownika!");
-      return false;
+      return null;
     }
 
     final url = Uri.parse('$_baseUrl/entries/$currentUserId');
@@ -165,19 +192,58 @@ class ApiService {
               "category": entry.category,
               "image_paths": entry.imagePaths,
               "date": entry.date.toIso8601String(),
+              "conversation": entry.conversation,
+              "ai_analysis": entry.aiAnalysis,
             }),
           )
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        print("Wpis zapisany na serwerze!");
-        return true;
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        print("Wpis zapisany na serwerze! ID: ${data['id']}");
+        return data['id'] as int?;
       } else {
         print("Błąd zapisu wpisu: ${response.body}");
-        return false;
+        return null;
       }
     } catch (e) {
       print("Błąd połączenia przy zapisie: $e");
+      return null;
+    }
+  }
+
+  Future<bool> updateEntry(MoodEntry entry) async {
+    if (currentUserId == null || entry.backendId == null) {
+        print("Cannot update entry: Missing UserId or BackendId");
+        return false;
+    }
+    final url = Uri.parse('$_baseUrl/entries/${entry.backendId}');
+    try {
+      final response = await http
+          .put(
+            url,
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "text": entry.text,
+              "mood_rating": entry.moodRating, // Required by schema but ignored/overwritten usually
+              "category": entry.category,
+              "image_paths": entry.imagePaths,
+              "date": entry.date.toIso8601String(),
+              "conversation": entry.conversation,
+              "ai_analysis": entry.aiAnalysis,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        print("Wpis zaktualizowany na serwerze! ID: ${entry.backendId}");
+        return true;
+      } else {
+        print("Błąd aktualizacji wpisu: ${response.statusCode} ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print("Błąd połączenia (aktualizacja): $e");
       return false;
     }
   }
@@ -203,7 +269,7 @@ class ApiService {
             aiAnalysis: item['ai_analysis'] ?? "",
             conversation: item['conversation'] ?? "",
             imagePaths: List<String>.from(item['image_paths'] ?? []),
-            ownerId: item['owner_id'],
+            ownerId: item['owner_id'].toString(),
           );
         }).toList();
 
@@ -218,6 +284,57 @@ class ApiService {
     }
   }
 
+  Future<bool> deleteEntry(int entryId) async {
+    if (currentUserId == null) return false;
+    final url = Uri.parse('$_baseUrl/entries/$entryId');
+    try {
+      final response = await http
+          .delete(url)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 204 || response.statusCode == 200) {
+        print("Wpis usunięty z serwera!");
+        return true;
+      } else {
+        print("Błąd usuwania wpisu: ${response.statusCode}");
+        return false;
+      }
+    } catch (e) {
+      print("Błąd połączenia (usuwanie): $e");
+      return false;
+    }
+  }
+
+  // Robust deletion fallback - Server Side
+  Future<bool> deleteEntryByContent(DateTime date, String text) async {
+    if (currentUserId == null) return false;
+    final url = Uri.parse('$_baseUrl/entries/delete_by_content');
+    
+    try {
+      final response = await http
+          .post(
+            url,
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "user_id": currentUserId,
+              "text": text,
+              "date": date.toIso8601String(),
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        print("Usunięto wpis(y) poprzez dopasowanie zawartości.");
+        return true;
+      } else {
+        print("Nie znaleziono wpisu do usunięcia (fallback): ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print("Błąd deleteEntryByContent: $e");
+      return false;
+    }
+  }
+
   // --- ANALIZA AI ---
   Future<MoodAnalysis?> getMoodAnalysis(String rangeType, String languageCode) async {
     // ... (existing code) ...
@@ -227,33 +344,22 @@ class ApiService {
     DateTime now = DateTime.now();
     DateTime startDate = now;
 
-    // Mapowanie zakresów (jeśli UI wysyła PL nazwy, a backend potrzebuje czegoś innego,
-    // ale tu logika jest po stronie Darta)
-    // UWAGA: Jeśli 'rangeType' jest z TranslationService, to może być po angielsku!
-    // Dla uproszczenia zakładamy, że logika dat jest uniwersalna lub UI wysyła klucze.
-    // Ale w main.dart przekazujemy przetłumaczone stringi do UI...
-    // Sprawdźmy co wysyła AnalysisDetailScreen. Wysyła _currentRange, który jest z listy ['Dzień', 'Tydzień'...]
-    // Trzeba to ujednolicić, ale na razie dodajmy tylko lang.
-
+    // Mapowanie zakresów (teraz spójne klucze)
     switch (rangeType) {
-      case 'Dzień':
-      case 'Day': // English support
+      case 'day':
         startDate = now;
         break;
-      case 'Tydzień':
-      case 'Week':
+      case 'week':
         startDate = now.subtract(const Duration(days: 7));
         break;
-      case 'Miesiąc':
-      case 'Month':
+      case 'month':
         startDate = now.subtract(const Duration(days: 30));
         break;
-      case 'Rok':
-      case 'Year':
+      case 'year':
         startDate = now.subtract(const Duration(days: 365));
         break;
       default:
-        // Fallback dla innych języków lub błędów - domyślnie tydzień
+        // Fallback - domyślnie tydzień
         startDate = now.subtract(const Duration(days: 7));
     }
 

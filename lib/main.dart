@@ -15,6 +15,7 @@ import 'screens/home_screen.dart' show HomeScreenUI, HomeScreenUIState;
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
 import 'widgets/edit_entry_screen.dart';
+import 'widgets/password_requirements_widget.dart';
 import 'widgets/mood_card.dart';
 
 // --- 1. KONFIGURACJA KOLORÓW ---
@@ -38,6 +39,7 @@ class AppSettings extends ChangeNotifier {
   double fontSize = 14.0;
   bool isAiFemale = false;
   bool isDarkMode = false;
+  String? customAssistantName;
   Locale locale = const Locale('pl');
 
   void setFontSizeSmall() {
@@ -63,6 +65,23 @@ class AppSettings extends ChangeNotifier {
   void toggleTheme(bool value) {
     isDarkMode = value;
     notifyListeners();
+  }
+
+  void setCustomAssistantName(String? name) {
+    customAssistantName = name;
+    notifyListeners();
+  }
+
+  String get assistantName {
+    if (customAssistantName != null && customAssistantName!.isNotEmpty) {
+      return customAssistantName!;
+    }
+    // Default names logic
+    if (locale.languageCode == 'pl') {
+      return isAiFemale ? 'Katarzyna' : 'Michał';
+    } else {
+      return isAiFemale ? 'Katie' : 'Mike';
+    }
   }
 
   void changeLocale(Locale newLocale) {
@@ -199,6 +218,14 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _passwordController.addListener(() {
+      if (!_isLoginMode) setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _usernameFocus.dispose();
     _emailFocus.dispose();
@@ -230,21 +257,61 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    if (!_isLoginMode) {
+      final hasMinLength = password.length >= 8;
+      final hasUppercase = password.contains(RegExp(r'[A-Z]'));
+      final hasDigit = password.contains(RegExp(r'[0-9]'));
+      final hasSpecial = password.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'));
+
+      if (!hasMinLength || !hasUppercase || !hasDigit || !hasSpecial) {
+         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(TranslationService.tr('password_requirements'))),
+        );
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
 
     bool success;
     String message = "";
 
     if (_isLoginMode) {
-      success = await ApiService().loginUser(email, password);
-      message = success
-          ? TranslationService.tr('login_success')
-          : TranslationService.tr('login_error');
+      try {
+        await ApiService().loginUser(email, password);
+        message = TranslationService.tr('login_success');
+        success = true;
+      } catch (e) {
+        success = false;
+        if (e.toString().contains("EmailNotVerified")) {
+          message = TranslationService.tr('email_not_verified');
+        } else {
+          message = TranslationService.tr('login_error');
+        }
+      }
     } else {
       success = await ApiService().registerUser(email, username, password);
       if (success) {
-        await ApiService().loginUser(email, password);
-        message = "${TranslationService.tr('account_created')}$username.";
+        // Don't login automatically. Ask to verify.
+        message = TranslationService.tr('verify_email_sent');
+        // Switch to login mode
+        setState(() {
+          _isLoginMode = true;
+          _isLoading = false;
+        });
+        
+        if (!mounted) return;
+        showDialog(
+          context: context, 
+          builder: (context) => AlertDialog(
+            title: Text(TranslationService.tr('app_title')),
+            content: Text(message),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))
+            ],
+          )
+        );
+        return; 
       } else {
         message = TranslationService.tr('register_error');
       }
@@ -266,6 +333,57 @@ class _LoginScreenState extends State<LoginScreen> {
         SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     }
+  }
+
+  void _showForgotPasswordDialog(BuildContext context) {
+    final emailController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(TranslationService.tr('forgot_password')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(TranslationService.tr('enter_email_reset')),
+            const SizedBox(height: 10),
+            TextField(
+              controller: emailController,
+              decoration: InputDecoration(
+                hintText: TranslationService.tr('email'),
+                border: const OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(TranslationService.tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () async {
+              final email = emailController.text.trim();
+              if (email.isNotEmpty) {
+                Navigator.pop(context); // Close input dialog
+                // Show loading or just send
+                final success = await ApiService().requestPasswordReset(email);
+                if (mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(TranslationService.tr('reset_email_sent')),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              }
+            },
+            child: Text(TranslationService.tr('send_reset_link')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -418,6 +536,40 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+                    
+                    if (_isLoginMode)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            _showForgotPasswordDialog(context);
+                          },
+                          child: Text(
+                            TranslationService.tr('forgot_password'),
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                    
+                    if (!_isLoginMode) ...[
+                      const SizedBox(height: 16),
+                      // Pass 'isDark' as false because it's on blue background? 
+                      // actually the background is AppColors.primaryBlue. Requirements widget expects text color.
+                      // Let's modify widget or use a container with white bg?
+                      // The design has input fields with transparency.
+                      // Let's put it in a container with white/transparent background.
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: PasswordRequirementsWidget(
+                          password: _passwordController.text,
+                          isDark: true, // Treat as dark BG so text is light
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 32),
 
                     // Przycisk
@@ -495,9 +647,9 @@ class _LoginScreenState extends State<LoginScreen> {
               right: 16,
               child: Row(
                 children: [
-                  _buildLangBtn(settings, 'PL', const Locale('pl')),
-                  const SizedBox(width: 8),
-                  _buildLangBtn(settings, 'EN', const Locale('en')),
+                  _buildLangBtn(settings, '🇵🇱', const Locale('pl')),
+                  const SizedBox(width: 12),
+                  _buildLangBtn(settings, '🇬🇧', const Locale('en')),
                 ],
               ),
             ),
@@ -510,19 +662,27 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildLangBtn(AppSettings settings, String text, Locale locale) {
+    final isSelected = settings.locale == locale;
     return GestureDetector(
-      onTap: () => settings.changeLocale(locale),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        settings.changeLocale(locale);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
         decoration: BoxDecoration(
-          color: settings.locale == locale ? Colors.white : Colors.white.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(8),
+          color: Colors.transparent, // Always transparent
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.white : Colors.white.withOpacity(0.3),
+            width: isSelected ? 2.0 : 1.0, // Thicker border for selected
+          ),
         ),
         child: Text(
           text,
-          style: TextStyle(
-            color: settings.locale == locale ? AppColors.primaryBlue : Colors.white,
-            fontWeight: FontWeight.bold,
+          style: const TextStyle(
+            fontSize: 22, // Slightly smaller
           ),
         ),
       ),
@@ -556,8 +716,13 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
     final profile = await ApiService().getUserProfile();
     if (profile != null) {
       final isDark = profile['is_dark_mode'] as bool? ?? false;
+      final customName = profile['custom_assistant_name'] as String? ?? "";
+      
       // Aktualizujemy globalny stan
       appSettings.toggleTheme(isDark);
+      if (customName.isNotEmpty) {
+        appSettings.setCustomAssistantName(customName);
+      }
     }
   }
 
@@ -732,8 +897,25 @@ class _MainAppScaffoldState extends State<MainAppScaffold> {
             onPressed: () async {
               HapticFeedback.mediumImpact();
               Navigator.pop(ctx);
+              
+              // 1. Delete from Server (Robust Logic)
+              bool backendDeleted = false;
+              if (entry.backendId != null) {
+                backendDeleted = await ApiService().deleteEntry(entry.backendId!);
+              }
+              
+              if (!backendDeleted) {
+                // Fallback: Search & Destroy
+                // Note: using date/text from the entry object
+                await ApiService().deleteEntryByContent(entry.date, entry.text);
+              }
+
+              // 2. Delete Locally
               await DatabaseService.instance.deleteEntry(entry.id!);
+              
+              // 3. Refresh UI
               _refreshAll();
+              
               ScaffoldMessenger.of(
                 context,
               ).showSnackBar(const SnackBar(content: Text("Usunięto wpis")));

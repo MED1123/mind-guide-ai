@@ -1,5 +1,7 @@
 class MoodEntry {
-  final int? id;
+  final int? id; // Local SQLite ID
+  final int? backendId; // Remote Postgres ID
+  
   final DateTime date;
   String text;
   final double moodRating;
@@ -7,10 +9,11 @@ class MoodEntry {
   String aiAnalysis;
   String conversation;
   List<String> imagePaths;
-  final int? ownerId;
+  final String? ownerId;
 
   MoodEntry({
     this.id,
+    this.backendId,
     required this.date,
     required this.text,
     required this.moodRating,
